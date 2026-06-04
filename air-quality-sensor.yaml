@@ -1,0 +1,110 @@
+esphome:
+  name: air-quality-sensor
+  friendly_name: "Air-Quality Sensor"
+#  includes:
+#    - "cm1106.h"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# external_components:
+#   - source: github://pr#8293
+#     components: [cm1106]
+#     refresh: 60s
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    id: my_ota
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Air-Quality-Sensor"
+    password: !secret wifi_password
+
+captive_portal:
+
+i2c:
+  - id: i2c_sens
+    sda: 21
+    scl: 22
+    scan: true
+#    frequency: 200kHz
+#    timeout: 1s
+
+uart:
+  - id: cm1106_uart
+    rx_pin: 17
+    tx_pin: 16
+    baud_rate: 9600
+
+sensor:
+  - platform: sgp4x
+    i2c_id: i2c_sens
+    voc:
+      name: "VOC Index"
+      id: voc_value
+    nox:
+      name: "NOx Index"
+      id: nox_value
+
+  - platform: sht4x
+    i2c_id: i2c_sens
+    temperature:
+      name: "Temperature"
+      id: temp_value
+    humidity:
+      name: "Relative Humidity"
+      id: rh_value
+
+  - platform: cm1106
+    co2:
+      name: "CO2 Sensor"
+      id: co2_value
+      icon: "mdi:molecule-co2"
+    id: cm1106_sensor
+
+switch:
+  - platform: template
+    id: co2_zero_calibration
+    name: "CO2 zero calibration"
+    turn_on_action:
+      - lambda: |-
+          id(cm1106_sensor).calibrate_zero(425);
+      - switch.turn_off: co2_zero_calibration
+#      - cm1106.calibrate_zero: cm1106_sensor    
+
+binary_sensor:
+  - platform: template
+    internal: true
+    id: co2_auto_zero_calibration
+    lambda: |-
+      if (id(co2_value).state < 425)
+      {
+        return true;
+      }
+      else
+      {
+        return false;
+      }
+    filters:
+      - delayed_on: 15min
+    on_press:
+      then:
+        - lambda: |-
+            id(cm1106_sensor).calibrate_zero(425);
+#      - cm1106.calibrate_zero: cm1106_sensor 
