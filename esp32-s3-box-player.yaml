@@ -446,7 +446,7 @@ binary_sensor:
 # Touchscreen Knoppen voor Pagina 2: Radio Stations (100% Quote-Vrij)
 # ==============================================================================
 
-# Rij 1: Bovenste zenderknop (Index + 0)
+  # Rij 1: Bovenste zenderknop (Index 0)
   - platform: touchscreen
     id: btn_radio_row1
     touchscreen_id: my_touchscreen
@@ -461,15 +461,17 @@ binary_sensor:
         - lambda: |-
             int idx = (id(radio_page_index) * 3) + 0;
             if (idx < id(global_stations).size()) {
+              id(ha_radio_station).publish_state(id(global_stations)[idx]);
               id(s3_box_display).show_page(id(player_page));
-              
-              HomeAssistantServiceCall call;
-              call.set_service("input_select.select_option");
-              call.add_data("entity_id", "input_select.music_assistant_radio_select");
-              call.add_data("option", id(global_stations)[idx]);
-              id(api_id).send_homeassistant_service_call(call);
             }
-   # Rij 2: Middelste zenderknop (Index + 1)
+        - homeassistant.service:
+            service: input_select.select_option
+            data:
+              entity_id: input_select.music_assistant_radio_select
+            data_template:
+              option: !lambda 'return id(ha_radio_station).state;'
+
+  # Rij 2: Middelste zenderknop (Index 1)
   - platform: touchscreen
     id: btn_radio_row2
     touchscreen_id: my_touchscreen
@@ -484,14 +486,16 @@ binary_sensor:
         - lambda: |-
             int idx = (id(radio_page_index) * 3) + 1;
             if (idx < id(global_stations).size()) {
+              id(ha_radio_station).publish_state(id(global_stations)[idx]);
               id(s3_box_display).show_page(id(player_page));
-              
-              HomeAssistantServiceCall call;
-              call.set_service("input_select.select_option");
-              call.add_data("entity_id", "input_select.music_assistant_radio_select");
-              call.add_data("option", id(global_stations)[idx]);
-              id(api_id).send_homeassistant_service_call(call);
             }
+        - homeassistant.service:
+            service: input_select.select_option
+            data:
+              entity_id: input_select.music_assistant_radio_select
+            data_template:
+              option: !lambda 'return id(ha_radio_station).state;'
+
 
   # Rij 3: Onderste zenderknop (Index + 2)
   - platform: touchscreen
@@ -508,14 +512,15 @@ binary_sensor:
         - lambda: |-
             int idx = (id(radio_page_index) * 3) + 2;
             if (idx < id(global_stations).size()) {
+              id(ha_radio_station).publish_state(id(global_stations)[idx]);
               id(s3_box_display).show_page(id(player_page));
-              
-              HomeAssistantServiceCall call;
-              call.set_service("input_select.select_option");
-              call.add_data("entity_id", "input_select.music_assistant_radio_select");
-              call.add_data("option", id(global_stations)[idx]);
-              id(api_id).send_homeassistant_service_call(call);
             }
+        - homeassistant.service:
+            service: input_select.select_option
+            data:
+              entity_id: input_select.music_assistant_radio_select
+            data_template:
+              option: !lambda 'return id(ha_radio_station).state;'
 
 
 
@@ -778,7 +783,7 @@ display:
 
           // Knoppenbalk onderaan
           it.line(0, bar_start_y, 320, bar_start_y, id(color_light_gray));
-          int total_pages = (global_stations.size() + 2) / 3;
+          int total_pages = (id(global_stations).size() + 2) / 3;
           
           if (id(radio_page_index) > 0) {
             it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE045");
@@ -789,7 +794,7 @@ display:
           std::string page_text = esphome::str_sprintf("%d / %d", id(radio_page_index) + 1, total_pages);
           it.print(center_x, icon_center_y, id(font_artist), id(color_dark_gray), TextAlign::CENTER, page_text.c_str());
 
-          if ((start_index + 3) < global_stations.size()) {
+          if ((start_index + 3) < id(global_stations).size()) {
             it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE044");
           } else {
             it.print(280, icon_center_y, id(font_icons), id(color_dark_gray), TextAlign::CENTER, "\uE044");
