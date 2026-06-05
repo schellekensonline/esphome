@@ -5,7 +5,6 @@ substitutions:
   friendly_name: "ESP32 S3 Box player"
   
   # media player ID van Music assistant in Home assistant 
-  mass_player_id: "media_player.01krk5pnb04z9wv4pesrkcgj9x"
   speaker_buffer_duration: 1000ms
   speaker_timeout: 500ms
 
@@ -81,6 +80,12 @@ globals:
     restore_value: no
     initial_value: '0'
   - id: global_stations
+    type: std::vector<std::string>
+  - id: album_page_index
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: global_albums
     type: std::vector<std::string>
 
 # Sendspin integratie die verbinding maakt met Music Assistant
@@ -295,6 +300,17 @@ text_sensor:
     name: "Geselecteerde Radiozender vanaf HA"
     entity_id: input_select.music_assistant_radio_select
     id: ha_radio_station
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return x == "Geen favorieten gevonden";'  # text should match with HA input_select
+            then:
+              - homeassistant.service:
+                  service: automation.trigger
+                  data:
+                    entity_id: automation.music_assistant_get_radiostations_auto
+
 
   # 2. Deze sensor haalt de complete lijst met alle zenders binnen via het attribuut
   - platform: homeassistant
@@ -303,6 +319,29 @@ text_sensor:
     attribute: options
     id: ha_radio_options_list
 
+  # 1. Jouw huidige sensor (bevat het album dat NU geselecteerd is)
+  - platform: homeassistant
+    name: "Geselecteerde Album vanaf HA"
+    entity_id: input_select.music_assistant_album_select
+    id: ha_album
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return x == "Geen favorieten gevonden";' # text should match with HA input_select
+            then:
+              - homeassistant.service:
+                  service: automation.trigger
+                  data:
+                    entity_id: automation.music_assistant_get_albums_auto
+
+
+  # 2. Deze sensor haalt de complete lijst met alle albums binnen via het attribuut
+  - platform: homeassistant
+    name: "Beschikbare Albums Lijst"
+    entity_id: input_select.music_assistant_album_select
+    attribute: options
+    id: ha_album_options_list
 
 sensor:
   - platform: wifi_signal
@@ -319,8 +358,6 @@ sensor:
     unit_of_measurement: "%"
     entity_category: "diagnostic"
     device_class: ""
-
-
 
 #   - platform: sendspin
 #     name: "Track Progress"
@@ -362,6 +399,8 @@ binary_sensor:
             if (id(s3_box_display).get_active_page() == id(player_page)) {
               id(s3_box_display).show_page(id(radio_stations_page));
             } else if (id(s3_box_display).get_active_page() == id(radio_stations_page)) {
+              id(s3_box_display).show_page(id(albums_page));
+            } else if (id(s3_box_display).get_active_page() == id(albums_page)) {
               id(s3_box_display).show_page(id(settings_page));
             } else {
               id(s3_box_display).show_page(id(player_page));
@@ -557,6 +596,125 @@ binary_sensor:
         - lambda: |-
             if ((id(radio_page_index) * 3 + 3) < id(global_stations).size()) {
               id(radio_page_index)++;
+            }
+        - component.update: s3_box_display
+
+
+# ==============================================================================
+# Touchscreen Knoppen voor Pagina 3: Albums (100% Quote-Vrij)
+# ==============================================================================
+
+  # Rij 1: Bovenste zenderknop (Index 0)
+  - platform: touchscreen
+    id: btn_album_row1
+    touchscreen_id: my_touchscreen
+    pages: 
+      - albums_page
+    x_min: 20
+    x_max: 300
+    y_min: 50
+    y_max: 86
+    on_click:
+      then:
+        - lambda: |-
+            int idx = (id(album_page_index) * 3) + 0;
+            if (idx < id(global_albums).size()) {
+              id(ha_album).publish_state(id(global_albums)[idx]);
+              id(s3_box_display).show_page(id(player_page));
+            }
+        - homeassistant.service:
+            service: input_select.select_option
+            data:
+              entity_id: input_select.music_assistant_album_select
+            data_template:
+              option: !lambda 'return id(ha_album).state;'
+
+  # Rij 2: Middelste zenderknop (Index 1)
+  - platform: touchscreen
+    id: btn_album_row2
+    touchscreen_id: my_touchscreen
+    pages: 
+      - albums_page
+    x_min: 20
+    x_max: 300
+    y_min: 94
+    y_max: 130
+    on_click:
+      then:
+        - lambda: |-
+            int idx = (id(album_page_index) * 3) + 1;
+            if (idx < id(global_albums).size()) {
+              id(ha_album).publish_state(id(global_albums)[idx]);
+              id(s3_box_display).show_page(id(player_page));
+            }
+        - homeassistant.service:
+            service: input_select.select_option
+            data:
+              entity_id: input_select.music_assistant_album_select
+            data_template:
+              option: !lambda 'return id(ha_album).state;'
+
+
+  # Rij 3: Onderste zenderknop (Index + 2)
+  - platform: touchscreen
+    id: btn_album_row3
+    touchscreen_id: my_touchscreen
+    pages: 
+      - albums_page
+    x_min: 20
+    x_max: 300
+    y_min: 138
+    y_max: 174
+    on_click:
+      then:
+        - lambda: |-
+            int idx = (id(album_page_index) * 3) + 2;
+            if (idx < id(global_albums).size()) {
+              id(ha_album).publish_state(id(global_albums)[idx]);
+              id(s3_box_display).show_page(id(player_page));
+            }
+        - homeassistant.service:
+            service: input_select.select_option
+            data:
+              entity_id: input_select.music_assistant_album_select
+            data_template:
+              option: !lambda 'return id(ha_album).state;'
+
+
+
+  # Bladerknop: VORIGE PAGINA (Links onderaan - Exact op het icoon)
+  - platform: touchscreen
+    id: btn_album_prev
+    touchscreen_id: my_touchscreen
+    pages:
+      - albums_page
+    x_min: 0
+    x_max: 90
+    y_min: 190  # Ruime touchzone rondom de knoppenbalk onderaan
+    y_max: 240
+    on_click:
+      then:
+        - lambda: |-
+            if (id(album_page_index) > 0) {
+              id(album_page_index)--;
+            }
+        - component.update: s3_box_display
+
+  # Bladerknop: VOLGENDE PAGINA (Rechts onderaan - Exact op het icoon)
+  - platform: touchscreen
+    id: btn_album_next
+    touchscreen_id: my_touchscreen
+    pages:
+      - albums_page
+    x_min: 230
+    x_max: 320
+    y_min: 190  # Ruime touchzone rondom de knoppenbalk onderaan
+    y_max: 240
+    on_click:
+      then:
+        - lambda: |-
+            if ((id(album_page_index) * 3 + 3) < id(global_albums).size()) {
+              id(album_page_index)++;
             }
         - component.update: s3_box_display
 
@@ -802,7 +960,95 @@ display:
  
 
       # ==============================================================================
-      # PAGINA 3: INSTELLINGEN (settings_page)
+      # PAGINA 3: Favorieten Albums (Geheugenveilige Modern C++ Versie)
+      # ==============================================================================
+      - id: albums_page
+        lambda: |-
+          int center_x = 160;
+          int bar_start_y = 240 - (${player_icon_font_size} + 16);
+          int icon_center_y = bar_start_y + ((${player_icon_font_size} + 16) / 2);
+
+          it.fill(id(color_dark_gray));
+
+          // Pagina Titel
+          it.print(center_x, 20, id(font_title), id(color_white), TextAlign::CENTER, "Favoriete Albums");
+          it.line(20, 38, 300, 38, id(color_light_gray));
+
+          // Wis de oude lijst en vul de globale vector opnieuw met schone namen
+          id(global_albums).clear();
+          std::string raw_options = id(ha_album_options_list).has_state() ? id(ha_album_options_list).state : "";
+          
+          if (!raw_options.empty() && raw_options != "Laden..." && raw_options != "Geen favorieten gevonden") {
+            std::stringstream ss(raw_options);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+              if (!item.empty()) {
+                size_t start = item.find_first_not_of(" []\"'");
+                size_t end = item.find_last_not_of(" []\"'");
+                if (start != std::string::npos && end != std::string::npos) {
+                  id(global_albums).push_back(item.substr(start, end - start + 1));
+                }
+              }
+            }
+          }
+
+          std::string current_playing = id(ha_album).has_state() ? id(ha_album).state : "";
+
+          // Failsafe: Als de lijst leeg is
+          if (id(global_albums).empty()) {
+            it.print(center_x, 110, id(font_artist), id(color_light_gray), TextAlign::CENTER, "Geen favorieten gevonden");
+            it.print(center_x, 140, id(font_artist), id(color_dark_gray), TextAlign::CENTER, "Markeer favorieten in Music Assistant");
+            it.line(0, bar_start_y, 320, bar_start_y, id(color_light_gray));
+            return;
+          }
+
+          // Teken de 3 rijen albums (Gebruik vanaf nu id(global_albums))
+          int start_index = id(album_page_index) * 3;
+          int y_offset = 50;
+          int row_height = 36;  
+          int spacing = 8;
+
+          for (int i = 0; i < 3; i++) {
+            int current_idx = start_index + i;
+            if (current_idx >= id(global_albums).size()) break;
+
+            std::string station_name = id(global_albums)[current_idx];
+
+            int current_y = y_offset + (i * (row_height + spacing));
+
+            bool is_active = (current_playing == station_name);
+
+            if (is_active) {
+              it.filled_rectangle(20, current_y, 280, row_height, id(color_green));
+              it.print(center_x, current_y + (row_height/2), id(font_artist), id(color_dark_gray), TextAlign::CENTER, station_name.c_str());
+            } else {
+              it.filled_rectangle(20, current_y, 280, row_height, id(color_light_gray));
+              it.print(center_x, current_y + (row_height/2), id(font_artist), id(color_white), TextAlign::CENTER, station_name.c_str());
+            }
+          }
+
+          // Knoppenbalk onderaan
+          it.line(0, bar_start_y, 320, bar_start_y, id(color_light_gray));
+          int total_pages = (id(global_albums).size() + 2) / 3;
+          
+          if (id(album_page_index) > 0) {
+            it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE045");
+          } else {
+            it.print(40, icon_center_y, id(font_icons), id(color_dark_gray), TextAlign::CENTER, "\uE045");
+          }
+          
+          std::string page_text = esphome::str_sprintf("%d / %d", id(album_page_index) + 1, total_pages);
+          it.print(center_x, icon_center_y, id(font_artist), id(color_dark_gray), TextAlign::CENTER, page_text.c_str());
+
+          if ((start_index + 3) < id(global_albums).size()) {
+            it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE044");
+          } else {
+            it.print(280, icon_center_y, id(font_icons), id(color_dark_gray), TextAlign::CENTER, "\uE044");
+          }
+
+
+      # ==============================================================================
+      # PAGINA 4: INSTELLINGEN (settings_page)
       # ==============================================================================
       - id: settings_page
         lambda: |-
