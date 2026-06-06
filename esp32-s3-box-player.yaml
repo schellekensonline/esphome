@@ -1,78 +1,65 @@
 substitutions:
   name: "esp32-s3-box-player"
-  ha_id_name: "esp32_s3_box_player"  # HA entity name of the box typically name but with _ iso. -
-  ha_ip_port: !secret ha_ip_port
   friendly_name: "ESP32 S3 Box player"
-  
-  # media player ID van Music assistant in Home assistant 
+  ha_ip_port: !secret ha_ip_port
+
   speaker_buffer_duration: 1000ms
   speaker_timeout: 500ms
 
-  # 1. Titel artiest max string breedtes
+  # Display layout — change fonts here, touch zones follow automatically
+  display_width: "320"
+  display_height: "240"
   max_title_length: "22"
   max_artist_length: "26"
-
-  # 2. Lettertype-toewijzing (Wissel hier eenvoudig tussen klein en groot)
   title_font_size: "24"
-  artist_font_size: "18"  
-  player_icon_font_size: "28"    
-  player_icon_touch_ymax: "196"  #  240 - (${player_icon_font_size} + 16);
-  title_y: ${title_font_size}    # same as title_font_size
-  artist_y: "54"                 # title_font_size*1.5 + artist_font_size
+  artist_font_size: "18"
+  player_icon_font_size: "28"
+  icon_bar_height: "44"          # IMPROVED: player_icon_font_size + 16
+  player_icon_touch_ymax: "196"  # IMPROVED: display_height - icon_bar_height
+  title_y: "24"
+  artist_y: "54"
+  list_y_offset: "50"
+  list_row_height: "36"
+  list_row_spacing: "8"
+  list_touch_ymax: "174"         # IMPROVED: y offset + 3 rows
+  page_nav_y_min: "190"
 
 esphome:
   name: ${name}
-  friendly_name: ${friendly_name} 
+  friendly_name: ${friendly_name}
   includes:
     - <sstream>
 
 esp32:
-  board: esp32-s3-devkitc-1  # Generiek S3 board dat door esp-idf wél herkend wordt
-  variant: esp32s3           # Vertelt ESPHome dat het om de S3-architectuur gaat
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
   framework:
     type: esp-idf
 
-# VEREIST: Activeer de Octal PSRAM voor de S3-BOX
 psram:
   mode: octal
   speed: 80MHz
 
-# Enable logging
 logger:
 
-# Enable Home Assistant API
 api:
-  id: api_id                    # <--- VOEG DEZE LIJN TOE
   encryption:
     key: !secret api_key
-  homeassistant_services: true  # <--- ZORG DAT DEZE REGEL AANSTAAT
+  homeassistant_services: true
 
 ota:
   - platform: esphome
-    id: my_ota
     password: !secret ota_password
 
 wifi:
-  id: wifi_wificomponent # <-- Dit zorgt ervoor dat de display-lambda de wifi kan vinden!
+  id: wifi_wificomponent
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "Esp32-S3-Box-Fallback-Hotspot"
     password: !secret wifi_password
 
 captive_portal:
-
-## FIND INFO ON
-## https://github.com/BigBobbas/ESP32-S3-Box3-Custom-ESPHome/blob/main/instructions/make%20it%20your%20own.md
-
-## You can change the friendly name if you wish on line 7 below. The friendly name is how the device will show in HA
-## However the <name:> is how HA connects to the device eg. esp32-s3-box.local is the mDNS hostname for the device.
-## Once added to HA changing the device name can lead to connection issues, between HA and the device.
-
-## https://www.home-assistant.io/voice_control/s3_box_voice_assistant/
-
 
 globals:
   - id: radio_page_index
@@ -88,41 +75,122 @@ globals:
   - id: global_albums
     type: std::vector<std::string>
 
-# Sendspin integratie die verbinding maakt met Music Assistant
 sendspin:
   id: sendspin_hub
-  task_stack_in_psram: true 
+  task_stack_in_psram: true
 
-
-# HTTP Request is nodig om de albumart URL daadwerkelijk te downloaden
 http_request:
   useragent: esphome/device
-  timeout: 2s                 # Voorkomt dat een trage download de audio-sockets blokkeert
-  # verify_ssl: false
-  # buffer_size_rx: 1024
-  # buffer_size_tx: 256
+  timeout: 2s
+
+# IMPROVED: periodic refresh so scrolling titles actually animate
+interval:
+  - interval: 500ms
+    then:
+      - if:
+          condition:
+            display.is_displaying_page: player_page
+          then:
+            - component.update: s3_box_display
+
+# IMPROVED: shared selection logic instead of 6 nearly identical touch handlers per page
+script:
+  - id: select_radio_row
+    parameters:
+      row: int
+    then:
+      - lambda: |-
+          if (row < 0 || row > 2) return;
+          int idx = (id(radio_page_index) * 3) + row;
+          if (idx >= id(global_stations).size()) return;
+          id(ha_radio_station).publish_state(id(global_stations)[idx]);
+          id(s3_box_display).show_page(id(player_page));
+      - homeassistant.service:
+          service: input_select.select_option
+          data:
+            entity_id: input_select.music_assistant_radio_select
+          data_template:
+            option: !lambda |-
+              int idx = (id(radio_page_index) * 3) + row;
+              return id(global_stations)[idx];
+      # Always play — even if input_select already had this station
+      - homeassistant.service:
+          service: music_assistant.play_media
+          data:
+            entity_id: media_player.esp32_s3_box_player
+          data_template:
+            media_id: !lambda |-
+              int idx = (id(radio_page_index) * 3) + row;
+              return id(global_stations)[idx];
+            media_type: radio
+
+  - id: select_album_row
+    parameters:
+      row: int
+    then:
+      - lambda: |-
+          if (row < 0 || row > 2) return;
+          int idx = (id(album_page_index) * 3) + row;
+          if (idx >= id(global_albums).size()) return;
+          id(ha_album).publish_state(id(global_albums)[idx]);
+          id(s3_box_display).show_page(id(player_page));
+      - homeassistant.service:
+          service: input_select.select_option
+          data:
+            entity_id: input_select.music_assistant_album_select
+          data_template:
+            option: !lambda |-
+              int idx = (id(album_page_index) * 3) + row;
+              return id(global_albums)[idx];
+      # Always play — even if input_select already had this album
+      - homeassistant.service:
+          service: music_assistant.play_media
+          data:
+            entity_id: media_player.esp32_s3_box_player
+          data_template:
+            media_id: !lambda |-
+              int idx = (id(album_page_index) * 3) + row;
+              return id(global_albums)[idx];
+            media_type: album
+
+  - id: radio_page_prev
+    then:
+      - lambda: |-
+          if (id(radio_page_index) > 0) id(radio_page_index)--;
+      - component.update: s3_box_display
+
+  - id: radio_page_next
+    then:
+      - lambda: |-
+          if ((id(radio_page_index) * 3 + 3) < id(global_stations).size()) id(radio_page_index)++;
+      - component.update: s3_box_display
+
+  - id: album_page_prev
+    then:
+      - lambda: |-
+          if (id(album_page_index) > 0) id(album_page_index)--;
+      - component.update: s3_box_display
+
+  - id: album_page_next
+    then:
+      - lambda: |-
+          if ((id(album_page_index) * 3 + 3) < id(global_albums).size()) id(album_page_index)++;
+      - component.update: s3_box_display
 
 switch:
-  # # Activeert de interne stroomvoorziening naar de TT21100 touch-chip op de v1 hardware
-  # - platform: gpio
-  #   pin: GPIO47              # De fysieke VEXT stroomschakelaar-pin op de S3-BOX v1
-  #   id: vext_power_switch
-  #   restore_mode: ALWAYS_ON   # Dwingt de box om direct bij het opstarten stroom te geven
-  # fysieke schakelaar om interne speaker aan te zetten (default uit)
   - platform: gpio
     name: Speaker Enable
     id: speaker_enable
-    pin: 
+    pin:
       number: GPIO46
       ignore_strapping_warning: true
     restore_mode: ALWAYS_OFF
     entity_category: config
     disabled_by_default: true
 
-# 2. Backlight inschakelen (Essentieel voor de S3-BOX!)
 output:
   - platform: ledc
-    pin: 
+    pin:
       number: GPIO45
       ignore_strapping_warning: true
     id: backlight_pwm
@@ -132,12 +200,8 @@ light:
     output: backlight_pwm
     name: "Backlight"
     id: backlight
-    restore_mode: ALWAYS_ON # Zorgt dat het scherm direct oplicht bij booten
+    restore_mode: ALWAYS_ON
 
-# I2C Bus initialisatie voor
-# de interne TT21100 touch-chip van de S3-BOX v1
-# interne dac speaker
-# interne adc microfoon
 i2c:
   - id: i2c_bus
     sda: GPIO08
@@ -147,21 +211,16 @@ i2c:
     scl_pullup_enabled: true
     frequency: 400kHz
 
-# ==============================================================================
-# 6. TOUCH CONTROLS HARDWARE DRIVER (Eénmalig te definiëren)
-# ==============================================================================
 touchscreen:
   - platform: tt21100
     id: my_touchscreen
-    i2c_id: i2c_bus  # Luistert naar de pinnen 41 en 42
-    interrupt_pin: 
-        number: GPIO3
-        ignore_strapping_warning: true
+    i2c_id: i2c_bus
+    interrupt_pin:
+      number: GPIO3
+      ignore_strapping_warning: true
     transform:
       mirror_x: true
 
-## Audio
-# 1. De fysieke audio-bus instellen voor PCM5xxx
 i2s_audio:
   - id: external_i2s_bus
     i2s_bclk_pin: GPIO43
@@ -172,25 +231,21 @@ i2s_audio:
     i2s_bclk_pin: GPIO17
     i2s_mclk_pin: GPIO2
 
-
-# voor interne microfoon
-audio_adc: 
+audio_adc:
   - platform: es7210
     id: es7210_adc
     i2c_id: i2c_bus
     bits_per_sample: 16bit
     sample_rate: 16000
 
-# voor interne speaker
-audio_dac: 
+audio_dac:
   - platform: es8311
     id: es8311_dac
     i2c_id: i2c_bus
     bits_per_sample: 16bit
     sample_rate: 48000
 
-# interne microfoon
-microphone: 
+microphone:
   - platform: i2s_audio
     id: box_mic
     i2s_audio_id: i2s_audio_bus
@@ -199,9 +254,7 @@ microphone:
     bits_per_sample: 16bit
     adc_type: external
 
-
 speaker:
-  # fysieke PCM5101 DAC koppelen als speaker-hardware
   - platform: i2s_audio
     id: pcm5101_speaker
     i2s_audio_id: external_i2s_bus
@@ -210,7 +263,6 @@ speaker:
     channel: stereo
     buffer_duration: ${speaker_buffer_duration}
     timeout: ${speaker_timeout}
-  # fysieke interne DAC koppelen als speaker-hardware
   - id: i2s_audio_speaker
     platform: i2s_audio
     i2s_audio_id: i2s_audio_bus
@@ -222,17 +274,10 @@ speaker:
     audio_dac: es8311_dac
     buffer_duration: 100ms
 
-
-# ==============================================================================
-# 1. DE AUDIOBRON (Staat los als hoofdcomponent, NIET ingesprongen!)
-# ==============================================================================
 media_source:
   - platform: sendspin
     id: sendspin_audio_source
 
-# ==============================================================================
-# 2. DE MEDIA PLAYER & PIPELINE (Koppelt de DAC aan de audiobron)
-# ==============================================================================
 media_player:
   - platform: speaker_source
     id: pcm5101_player
@@ -242,17 +287,13 @@ media_player:
       sources:
         - sendspin_audio_source
 
-# 3. De Online Image component die de URL downloadt en in het geheugen buffert
 online_image:
   - id: mass_album_art
     url: "https://lipsum.app/100x100/"
     format: JPEG
     type: RGB565
-    resize: "100x100" # Zorgt ervoor dat de ESP32 de grote webabeelding verkleint naar het schermformaat
+    resize: "100x100"
 
-# ==============================================================================
-# 4. SENDSPIN METADATA SENSORS AND ALBUMART THROUGH HA
-# ==============================================================================
 text_sensor:
   - platform: sendspin
     name: "Sendspin Title"
@@ -269,79 +310,90 @@ text_sensor:
     on_value:
       then:
         - component.update: s3_box_display
- 
+
   - platform: homeassistant
     id: mass_album_art_url
-    entity_id: media_player.${ha_id_name}
-    attribute: entity_picture
+    entity_id: sensor.music_assistant_active_album_art
     on_value:
       then:
         - lambda: |-
-            if (x.empty()) {
-              ESP_LOGD("main", "Geen muziek actief of geen albumhoes gevonden.");
+            if (x == "none" || x.empty()) {
+              ESP_LOGD("main", "No album art active.");
+              id(mass_album_art).set_url("https://lipsum.app/100x100/");  // IMPROVED: avoid empty URL HTTP errors
+              id(mass_album_art).update();
             } else {
               std::string full_url = x;
-              
-              // Soms geeft HA een lokaal relatief pad (/api/...) i.p.v. een directe Spotify URL.
-              // Als het pad met '/' begint, plakken we jouw Home Assistant IP-adres ervoor:
               if (x.rfind("/", 0) == 0) {
-                full_url = str_sprintf("%s%s", "${ha_ip_port}", x.c_str()); // Pas dit IP aan naar jouw HA server!
+                full_url = str_sprintf("%s%s", "${ha_ip_port}", x.c_str());
               }
-              
-              ESP_LOGD("main", "Nieuwe albumhoes URL doorsturen: %s", full_url.c_str());
-              
-              // Update de URL van de online_image component en start de download
+              ESP_LOGD("main", "Album art URL: %s", full_url.c_str());
               id(mass_album_art).set_url(full_url);
               id(mass_album_art).update();
             }
 
-  # 1. Jouw huidige sensor (bevat de zender die NU geselecteerd is)
   - platform: homeassistant
     name: "Geselecteerde Radiozender vanaf HA"
     entity_id: input_select.music_assistant_radio_select
     id: ha_radio_station
-    on_value:
-      then:
-        - if:
-            condition:
-              lambda: 'return x == "Geen favorieten gevonden";'  # text should match with HA input_select
-            then:
-              - homeassistant.service:
-                  service: automation.trigger
-                  data:
-                    entity_id: automation.music_assistant_get_radiostations_auto
 
-
-  # 2. Deze sensor haalt de complete lijst met alle zenders binnen via het attribuut
+  # IMPROVED: parse list once on change, not on every display frame
   - platform: homeassistant
     name: "Beschikbare Radiozenders Lijst"
     entity_id: input_select.music_assistant_radio_select
     attribute: options
     id: ha_radio_options_list
+    on_value:
+      then:
+        - lambda: |-
+            id(global_stations).clear();
+            if (x.empty() || x == "Laden..." || x == "Geen favorieten gevonden") return;
 
-  # 1. Jouw huidige sensor (bevat het album dat NU geselecteerd is)
+            std::stringstream ss(x);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+              if (item.empty()) continue;
+              size_t start = item.find_first_not_of(" []\"'");
+              size_t end = item.find_last_not_of(" []\"'");
+              if (start != std::string::npos && end != std::string::npos) {
+                id(global_stations).push_back(item.substr(start, end - start + 1));
+              }
+            }
+
+            int max_page = id(global_stations).empty() ? 0 : (id(global_stations).size() - 1) / 3;
+            if (id(radio_page_index) > max_page) id(radio_page_index) = max_page;
+        - component.update: s3_box_display
+
   - platform: homeassistant
     name: "Geselecteerde Album vanaf HA"
     entity_id: input_select.music_assistant_album_select
     id: ha_album
-    on_value:
-      then:
-        - if:
-            condition:
-              lambda: 'return x == "Geen favorieten gevonden";' # text should match with HA input_select
-            then:
-              - homeassistant.service:
-                  service: automation.trigger
-                  data:
-                    entity_id: automation.music_assistant_get_albums_auto
 
-
-  # 2. Deze sensor haalt de complete lijst met alle albums binnen via het attribuut
+  # IMPROVED: parse list once on change, not on every display frame
   - platform: homeassistant
     name: "Beschikbare Albums Lijst"
     entity_id: input_select.music_assistant_album_select
     attribute: options
     id: ha_album_options_list
+    on_value:
+      then:
+        - lambda: |-
+            id(global_albums).clear();
+            if (x.empty() || x == "Laden..." || x == "Geen favorieten gevonden") return;
+
+            std::stringstream ss(x);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+              if (item.empty()) continue;
+              size_t start = item.find_first_not_of(" []\"'");
+              size_t end = item.find_last_not_of(" []\"'");
+              if (start != std::string::npos && end != std::string::npos) {
+                id(global_albums).push_back(item.substr(start, end - start + 1));
+              }
+            }
+
+            int max_page = id(global_albums).empty() ? 0 : (id(global_albums).size() - 1) / 3;
+            if (id(album_page_index) > max_page) id(album_page_index) = max_page;
+        - component.update: s3_box_display
 
 sensor:
   - platform: wifi_signal
@@ -356,26 +408,9 @@ sensor:
     filters:
       - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
     unit_of_measurement: "%"
-    entity_category: "diagnostic"
-    device_class: ""
-
-#   - platform: sendspin
-#     name: "Track Progress"
-#     type: track_progress
-#   - platform: sendspin
-#     name: "Track Duration"
-#     type: track_duration
-#   - platform: sendspin
-#     name: "Track Number"
-#     type: track
-#   - platform: sendspin
-#     name: "Year"
-#     type: year
+    entity_category: diagnostic
 
 binary_sensor:
-# ==============================================================================
-# 2. Fisieke knoppen
-# ==============================================================================
   - platform: gpio
     pin:
       number: GPIO0
@@ -385,9 +420,6 @@ binary_sensor:
     id: left_top_button
     internal: true
 
-# ==============================================================================
-# 2. Rode Cirkel Home knop (Togglet dynamisch opeenvolgend door alle pagina's)
-# ==============================================================================
   - platform: tt21100
     id: home_button
     index: 0
@@ -407,322 +439,160 @@ binary_sensor:
             }
         - component.update: s3_box_display
 
-
-# ==============================================================================
-# 2. DIRECTE MUSIC ASSISTANT CONTROLS VIA SENDSPIN (Geen Home Assistant nodig!)
-# ==============================================================================
-  # Media Knop 1: PREV
   - platform: touchscreen
     id: btn_media_prev
     touchscreen_id: my_touchscreen
     internal: true
-    pages:
-      - player_page
+    pages: [player_page]
     x_min: 0
     x_max: 80
     y_min: ${player_icon_touch_ymax}
-    y_max: 240
+    y_max: ${display_height}
     on_click:
       then:
         - media_player.previous: pcm5101_player
         - component.update: s3_box_display
 
-  # Media Knop 2: PLAY/PAUSE
   - platform: touchscreen
     id: btn_media_play
     touchscreen_id: my_touchscreen
     internal: true
-    pages:
-      - player_page
+    pages: [player_page]
     x_min: 80
     x_max: 160
     y_min: ${player_icon_touch_ymax}
-    y_max: 240
+    y_max: ${display_height}
     on_click:
       then:
         - media_player.toggle: pcm5101_player
         - component.update: s3_box_display
 
-  # Media Knop 3: NEXT
   - platform: touchscreen
     id: btn_media_next
     touchscreen_id: my_touchscreen
     internal: true
-    pages:
-      - player_page
+    pages: [player_page]
     x_min: 160
     x_max: 240
     y_min: ${player_icon_touch_ymax}
-    y_max: 240
+    y_max: ${display_height}
     on_click:
       then:
         - media_player.next: pcm5101_player
         - component.update: s3_box_display
 
-  # Media Knop 4: MUTE
   - platform: touchscreen
     id: btn_media_mute
     touchscreen_id: my_touchscreen
     internal: true
-    pages:
-      - player_page
+    pages: [player_page]
     x_min: 240
-    x_max: 320
+    x_max: ${display_width}
     y_min: ${player_icon_touch_ymax}
-    y_max: 240
+    y_max: ${display_height}
     on_click:
       then:
         - if:
             condition:
-              lambda: 'return id(pcm5101_player).is_muted();'
+              lambda: return id(pcm5101_player).is_muted();
             then:
               - media_player.unmute: pcm5101_player
             else:
               - media_player.mute: pcm5101_player
         - component.update: s3_box_display
 
-# ==============================================================================
-# Touchscreen Knoppen voor Pagina 2: Radio Stations (100% Quote-Vrij)
-# ==============================================================================
-
-  # Rij 1: Bovenste zenderknop (Index 0)
+  # IMPROVED: one list touch zone instead of three separate row buttons
   - platform: touchscreen
-    id: btn_radio_row1
+    id: btn_radio_list
     touchscreen_id: my_touchscreen
-    pages: 
-      - radio_stations_page
+    internal: true
+    pages: [radio_stations_page]
     x_min: 20
     x_max: 300
-    y_min: 50
-    y_max: 86
+    y_min: ${list_y_offset}
+    y_max: ${list_touch_ymax}
     on_click:
       then:
-        - lambda: |-
-            int idx = (id(radio_page_index) * 3) + 0;
-            if (idx < id(global_stations).size()) {
-              id(ha_radio_station).publish_state(id(global_stations)[idx]);
-              id(s3_box_display).show_page(id(player_page));
-            }
-        - homeassistant.service:
-            service: input_select.select_option
-            data:
-              entity_id: input_select.music_assistant_radio_select
-            data_template:
-              option: !lambda 'return id(ha_radio_station).state;'
-
-  # Rij 2: Middelste zenderknop (Index 1)
-  - platform: touchscreen
-    id: btn_radio_row2
-    touchscreen_id: my_touchscreen
-    pages: 
-      - radio_stations_page
-    x_min: 20
-    x_max: 300
-    y_min: 94
-    y_max: 130
-    on_click:
-      then:
-        - lambda: |-
-            int idx = (id(radio_page_index) * 3) + 1;
-            if (idx < id(global_stations).size()) {
-              id(ha_radio_station).publish_state(id(global_stations)[idx]);
-              id(s3_box_display).show_page(id(player_page));
-            }
-        - homeassistant.service:
-            service: input_select.select_option
-            data:
-              entity_id: input_select.music_assistant_radio_select
-            data_template:
-              option: !lambda 'return id(ha_radio_station).state;'
+        - script.execute:
+            id: select_radio_row
+            row: !lambda |-
+              auto tp = id(my_touchscreen)->get_touch();
+              if (!tp.has_value()) return -1;
+              return (tp.value().y - ${list_y_offset}) / (${list_row_height} + ${list_row_spacing});
 
 
-  # Rij 3: Onderste zenderknop (Index + 2)
-  - platform: touchscreen
-    id: btn_radio_row3
-    touchscreen_id: my_touchscreen
-    pages: 
-      - radio_stations_page
-    x_min: 20
-    x_max: 300
-    y_min: 138
-    y_max: 174
-    on_click:
-      then:
-        - lambda: |-
-            int idx = (id(radio_page_index) * 3) + 2;
-            if (idx < id(global_stations).size()) {
-              id(ha_radio_station).publish_state(id(global_stations)[idx]);
-              id(s3_box_display).show_page(id(player_page));
-            }
-        - homeassistant.service:
-            service: input_select.select_option
-            data:
-              entity_id: input_select.music_assistant_radio_select
-            data_template:
-              option: !lambda 'return id(ha_radio_station).state;'
-
-
-
-  # Bladerknop: VORIGE PAGINA (Links onderaan - Exact op het icoon)
   - platform: touchscreen
     id: btn_radio_prev
     touchscreen_id: my_touchscreen
-    pages:
-      - radio_stations_page
+    internal: true
+    pages: [radio_stations_page]
     x_min: 0
     x_max: 90
-    y_min: 190  # Ruime touchzone rondom de knoppenbalk onderaan
-    y_max: 240
+    y_min: ${page_nav_y_min}
+    y_max: ${display_height}
     on_click:
       then:
-        - lambda: |-
-            if (id(radio_page_index) > 0) {
-              id(radio_page_index)--;
-            }
-        - component.update: s3_box_display
+        - script.execute: radio_page_prev
 
-  # Bladerknop: VOLGENDE PAGINA (Rechts onderaan - Exact op het icoon)
   - platform: touchscreen
     id: btn_radio_next
     touchscreen_id: my_touchscreen
-    pages:
-      - radio_stations_page
+    internal: true
+    pages: [radio_stations_page]
     x_min: 230
-    x_max: 320
-    y_min: 190  # Ruime touchzone rondom de knoppenbalk onderaan
-    y_max: 240
+    x_max: ${display_width}
+    y_min: ${page_nav_y_min}
+    y_max: ${display_height}
     on_click:
       then:
-        - lambda: |-
-            if ((id(radio_page_index) * 3 + 3) < id(global_stations).size()) {
-              id(radio_page_index)++;
-            }
-        - component.update: s3_box_display
+        - script.execute: radio_page_next
 
-
-# ==============================================================================
-# Touchscreen Knoppen voor Pagina 3: Albums (100% Quote-Vrij)
-# ==============================================================================
-
-  # Rij 1: Bovenste zenderknop (Index 0)
+  # IMPROVED: one list touch zone instead of three separate row buttons
   - platform: touchscreen
-    id: btn_album_row1
+    id: btn_album_list
     touchscreen_id: my_touchscreen
-    pages: 
-      - albums_page
+    internal: true
+    pages: [albums_page]
     x_min: 20
     x_max: 300
-    y_min: 50
-    y_max: 86
+    y_min: ${list_y_offset}
+    y_max: ${list_touch_ymax}
     on_click:
       then:
-        - lambda: |-
-            int idx = (id(album_page_index) * 3) + 0;
-            if (idx < id(global_albums).size()) {
-              id(ha_album).publish_state(id(global_albums)[idx]);
-              id(s3_box_display).show_page(id(player_page));
-            }
-        - homeassistant.service:
-            service: input_select.select_option
-            data:
-              entity_id: input_select.music_assistant_album_select
-            data_template:
-              option: !lambda 'return id(ha_album).state;'
-
-  # Rij 2: Middelste zenderknop (Index 1)
-  - platform: touchscreen
-    id: btn_album_row2
-    touchscreen_id: my_touchscreen
-    pages: 
-      - albums_page
-    x_min: 20
-    x_max: 300
-    y_min: 94
-    y_max: 130
-    on_click:
-      then:
-        - lambda: |-
-            int idx = (id(album_page_index) * 3) + 1;
-            if (idx < id(global_albums).size()) {
-              id(ha_album).publish_state(id(global_albums)[idx]);
-              id(s3_box_display).show_page(id(player_page));
-            }
-        - homeassistant.service:
-            service: input_select.select_option
-            data:
-              entity_id: input_select.music_assistant_album_select
-            data_template:
-              option: !lambda 'return id(ha_album).state;'
+        - script.execute:
+            id: select_album_row
+            row: !lambda |-
+              auto tp = id(my_touchscreen)->get_touch();
+              if (!tp.has_value()) return -1;
+              return (tp.value().y - ${list_y_offset}) / (${list_row_height} + ${list_row_spacing});
 
 
-  # Rij 3: Onderste zenderknop (Index + 2)
-  - platform: touchscreen
-    id: btn_album_row3
-    touchscreen_id: my_touchscreen
-    pages: 
-      - albums_page
-    x_min: 20
-    x_max: 300
-    y_min: 138
-    y_max: 174
-    on_click:
-      then:
-        - lambda: |-
-            int idx = (id(album_page_index) * 3) + 2;
-            if (idx < id(global_albums).size()) {
-              id(ha_album).publish_state(id(global_albums)[idx]);
-              id(s3_box_display).show_page(id(player_page));
-            }
-        - homeassistant.service:
-            service: input_select.select_option
-            data:
-              entity_id: input_select.music_assistant_album_select
-            data_template:
-              option: !lambda 'return id(ha_album).state;'
-
-
-
-  # Bladerknop: VORIGE PAGINA (Links onderaan - Exact op het icoon)
   - platform: touchscreen
     id: btn_album_prev
     touchscreen_id: my_touchscreen
-    pages:
-      - albums_page
+    internal: true
+    pages: [albums_page]
     x_min: 0
     x_max: 90
-    y_min: 190  # Ruime touchzone rondom de knoppenbalk onderaan
-    y_max: 240
+    y_min: ${page_nav_y_min}
+    y_max: ${display_height}
     on_click:
       then:
-        - lambda: |-
-            if (id(album_page_index) > 0) {
-              id(album_page_index)--;
-            }
-        - component.update: s3_box_display
+        - script.execute: album_page_prev
 
-  # Bladerknop: VOLGENDE PAGINA (Rechts onderaan - Exact op het icoon)
   - platform: touchscreen
     id: btn_album_next
     touchscreen_id: my_touchscreen
-    pages:
-      - albums_page
+    internal: true
+    pages: [albums_page]
     x_min: 230
-    x_max: 320
-    y_min: 190  # Ruime touchzone rondom de knoppenbalk onderaan
-    y_max: 240
+    x_max: ${display_width}
+    y_min: ${page_nav_y_min}
+    y_max: ${display_height}
     on_click:
       then:
-        - lambda: |-
-            if ((id(album_page_index) * 3 + 3) < id(global_albums).size()) {
-              id(album_page_index)++;
-            }
-        - component.update: s3_box_display
+        - script.execute: album_page_next
 
-
-
-# ==============================================================================
-# 5. LETTERTYPEN & AFBEELDINGEN (Essentieel voor de rendering)
-# ==============================================================================
 font:
   - file: "gfonts://Roboto"
     id: font_title
@@ -733,17 +603,14 @@ font:
   - file: "gfonts://Material Symbols Outlined"
     id: font_icons
     size: ${player_icon_font_size}
-    glyphs: 
-      - "\uE045" # Skip Previous
-      - "\uE044" # Skip Next
-      - "\uE037" # Play Icon (Inactief/Gepauzeerd state)
-      - "\uE035" # Pause Icon (Actief spelend state)
-      - "\uE050" # Volume Up / Unmuted Icon
-      - "\uE04F" # Volume Mute Icon
-
-# ==============================================================================
-# 1. COLOR DEFINITIES (Centrale plek voor herbruikbare kleurelementen)
-# ==============================================================================
+    glyphs:
+      - "\uE045" # previous 
+      - "\uE044" # next 
+      - "\uE037" # play
+      - "\uE1A2" # pause-circle
+      - "\uE050" # unmuted
+      - "\uE04F" # muted
+      - "\uE034" # pause
 color:
   - id: color_white
     red: 100%
@@ -766,30 +633,25 @@ color:
     green: 60%
     blue: 60%
 
-
-# Scherm driver SPI Bus initialisatie
 spi:
   - id: spi_bus
     clk_pin: GPIO7
     mosi_pin: GPIO6
 
-# ==============================================================================
-# 3. DISPLAY CONFIGURATIE MET METADATA EN MULTI-PAGES
-# ==============================================================================
 display:
   - platform: mipi_spi
     model: ILI9342
     id: s3_box_display
     cs_pin: GPIO5
     dc_pin: GPIO4
-    reset_pin: 
+    reset_pin:
       number: GPIO48
       inverted: false
     data_rate: 40MHz
     color_depth: 16
     dimensions:
-      width: 320
-      height: 240
+      width: ${display_width}
+      height: ${display_height}
     transform:
       swap_xy: false
       mirror_x: true
@@ -797,20 +659,15 @@ display:
     pages:
       - id: player_page
         lambda: |-
-          int center_x = 160;
-          // 1. Achtergrond wissen
+          int center_x = ${display_width} / 2;
           it.fill(id(color_dark_gray));
 
-          // 2. Nu Spelend Titel (Scrollend op basis van variabele)
           if (id(sendspin_title).has_state()) {
             std::string title = id(sendspin_title).state;
-            
             if (title.length() > ${max_title_length}) {
-              title += "        "; 
+              title += "        ";
               int scroll_pos = (millis() / 150) % title.length();
               std::string scrolled_title = title.substr(scroll_pos) + title.substr(0, scroll_pos);
-              
-              // Snijdt de string af op de exact ingestelde lengte
               scrolled_title = scrolled_title.substr(0, ${max_title_length});
               it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, scrolled_title.c_str());
             } else {
@@ -820,12 +677,9 @@ display:
             it.print(center_x, ${title_y}, id(font_title), id(color_light_gray), TextAlign::CENTER, "Geen muziek");
           }
 
-          // 3. Nu Spelend Artiest (Afgekapt met puntjes op basis van variabele)
           if (id(sendspin_artist).has_state()) {
             std::string artist = id(sendspin_artist).state;
-            
             if (artist.length() > ${max_artist_length}) {
-              // Berekent dynamisch de lengte vóór de puntjes (ingestelde lengte minus 3)
               artist = artist.substr(0, ${max_artist_length} - 3) + "...";
             }
             it.print(center_x, ${artist_y}, id(font_artist), id(color_light_gray), TextAlign::CENTER, artist.c_str());
@@ -833,242 +687,146 @@ display:
             it.print(center_x, ${artist_y}, id(font_artist), id(color_dark_gray), TextAlign::CENTER, "Onbekende artiest");
           }
 
-          // 4. Automatische berekening van de statusbalk hoogte, iconen y-as, en album art positie
-          int bar_start_y = 240 - (${player_icon_font_size} + 16);
-          int icon_center_y = bar_start_y + ((${player_icon_font_size} + 16) / 2);
-
-          // ==============================================================================
-          // DYNAMISCH GEZENTREERD ALBUMPLAATJE / MEDIAPLAYER ICON
-          // ==============================================================================
-          int tekst_onderkant_y = ${artist_y}+(${artist_font_size}/2);           
+          int bar_start_y = ${display_height} - ${icon_bar_height};
+          int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
+          int tekst_onderkant_y = ${artist_y} + (${artist_font_size} / 2);
           int image_center_y = tekst_onderkant_y + ((bar_start_y - tekst_onderkant_y) / 2);
 
-          // Teken de afbeelding
           it.image(center_x, image_center_y, id(mass_album_art), ImageAlign::CENTER);
+          it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
 
-          // ==============================================================================
-          // AUTOMATISCH BEREKENDE KNOPPENBALK OP BASIS VAN FONT SIZE
-          // ==============================================================================
-          it.line(0, bar_start_y, 320, bar_start_y, id(color_light_gray));
+          it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE045");    // prev
 
-          // Kolom 1: PREV
-          it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE045");
-          
-          // Kolom 2: PLAY / PAUSE DYNAMISCH
           if (id(pcm5101_player).state == 2) {
-            it.print(120, icon_center_y, id(font_icons), id(color_green), TextAlign::CENTER, "\uE035"); 
+            it.print(120, icon_center_y, id(font_icons), id(color_green), TextAlign::CENTER, "\uE034"); // pause
           } else {
-            it.print(120, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE037"); 
-          }
-          
-          // Kolom 3: NEXT
-          it.print(200, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE044");
-          
-          // Kolom 4: MUTE DYNAMISCH
-          if (id(pcm5101_player).is_muted()) {
-            it.print(280, icon_center_y, id(font_icons), id(color_red), TextAlign::CENTER, "\uE04F"); 
-          } else {
-            it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE050"); 
+            it.print(120, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE037"); // play
           }
 
-      # ==============================================================================
-      # PAGINA 2: Favorieten radio stations (Geheugenveilige Modern C++ Versie)
-      # ==============================================================================
+          it.print(200, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE044");   // next
+
+          if (id(pcm5101_player).is_muted()) {
+            it.print(280, icon_center_y, id(font_icons), id(color_red), TextAlign::CENTER, "\uE04F");   // muted
+          } else {
+            it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE050"); // unmuted
+          }
+
+      # IMPROVED: draw only — list is parsed in ha_radio_options_list.on_value
       - id: radio_stations_page
         lambda: |-
-          int center_x = 160;
-          int bar_start_y = 240 - (${player_icon_font_size} + 16);
-          int icon_center_y = bar_start_y + ((${player_icon_font_size} + 16) / 2);
+          int center_x = ${display_width} / 2;
+          int bar_start_y = ${display_height} - ${icon_bar_height};
+          int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
 
           it.fill(id(color_dark_gray));
-
-          // Pagina Titel
           it.print(center_x, 20, id(font_title), id(color_white), TextAlign::CENTER, "Favoriete Zenders");
           it.line(20, 38, 300, 38, id(color_light_gray));
 
-          // Wis de oude lijst en vul de globale vector opnieuw met schone namen
-          id(global_stations).clear();
-          std::string raw_options = id(ha_radio_options_list).has_state() ? id(ha_radio_options_list).state : "";
-          
-          if (!raw_options.empty() && raw_options != "Laden..." && raw_options != "Geen favorieten gevonden") {
-            std::stringstream ss(raw_options);
-            std::string item;
-            while (std::getline(ss, item, ',')) {
-              if (!item.empty()) {
-                size_t start = item.find_first_not_of(" []\"'");
-                size_t end = item.find_last_not_of(" []\"'");
-                if (start != std::string::npos && end != std::string::npos) {
-                  id(global_stations).push_back(item.substr(start, end - start + 1));
-                }
-              }
-            }
-          }
-
           std::string current_playing = id(ha_radio_station).has_state() ? id(ha_radio_station).state : "";
 
-          // Failsafe: Als de lijst leeg is
           if (id(global_stations).empty()) {
             it.print(center_x, 110, id(font_artist), id(color_light_gray), TextAlign::CENTER, "Geen favorieten gevonden");
             it.print(center_x, 140, id(font_artist), id(color_dark_gray), TextAlign::CENTER, "Markeer favorieten in Music Assistant");
-            it.line(0, bar_start_y, 320, bar_start_y, id(color_light_gray));
+            it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
             return;
           }
 
-          // Teken de 3 rijen zenders (Gebruik vanaf nu id(global_stations))
           int start_index = id(radio_page_index) * 3;
-          int y_offset = 50;
-          int row_height = 36;  
-          int spacing = 8;
+          int y_offset = ${list_y_offset};
+          int row_height = ${list_row_height};
+          int spacing = ${list_row_spacing};
 
           for (int i = 0; i < 3; i++) {
             int current_idx = start_index + i;
             if (current_idx >= id(global_stations).size()) break;
 
             std::string station_name = id(global_stations)[current_idx];
-
             int current_y = y_offset + (i * (row_height + spacing));
-
             bool is_active = (current_playing == station_name);
 
             if (is_active) {
               it.filled_rectangle(20, current_y, 280, row_height, id(color_green));
-              it.print(center_x, current_y + (row_height/2), id(font_artist), id(color_dark_gray), TextAlign::CENTER, station_name.c_str());
+              it.print(center_x, current_y + (row_height / 2), id(font_artist), id(color_dark_gray), TextAlign::CENTER, station_name.c_str());
             } else {
               it.filled_rectangle(20, current_y, 280, row_height, id(color_light_gray));
-              it.print(center_x, current_y + (row_height/2), id(font_artist), id(color_white), TextAlign::CENTER, station_name.c_str());
+              it.print(center_x, current_y + (row_height / 2), id(font_artist), id(color_white), TextAlign::CENTER, station_name.c_str());
             }
           }
 
-          // Knoppenbalk onderaan
-          it.line(0, bar_start_y, 320, bar_start_y, id(color_light_gray));
+          it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
           int total_pages = (id(global_stations).size() + 2) / 3;
-          
-          if (id(radio_page_index) > 0) {
-            it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE045");
-          } else {
-            it.print(40, icon_center_y, id(font_icons), id(color_dark_gray), TextAlign::CENTER, "\uE045");
-          }
-          
-          std::string page_text = esphome::str_sprintf("%d / %d", id(radio_page_index) + 1, total_pages);
-          it.print(center_x, icon_center_y, id(font_artist), id(color_dark_gray), TextAlign::CENTER, page_text.c_str());
 
-          if ((start_index + 3) < id(global_stations).size()) {
-            it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE044");
-          } else {
-            it.print(280, icon_center_y, id(font_icons), id(color_dark_gray), TextAlign::CENTER, "\uE044");
-          }
- 
+          it.print(40, icon_center_y, id(font_icons), id(radio_page_index) > 0 ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE045");
+          it.print(center_x, icon_center_y, id(font_artist), id(color_dark_gray), TextAlign::CENTER,
+                   esphome::str_sprintf("%d / %d", id(radio_page_index) + 1, total_pages).c_str());
+          it.print(280, icon_center_y, id(font_icons), (start_index + 3) < id(global_stations).size() ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE044");
 
-      # ==============================================================================
-      # PAGINA 3: Favorieten Albums (Geheugenveilige Modern C++ Versie)
-      # ==============================================================================
+      # IMPROVED: draw only — list is parsed in ha_album_options_list.on_value
       - id: albums_page
         lambda: |-
-          int center_x = 160;
-          int bar_start_y = 240 - (${player_icon_font_size} + 16);
-          int icon_center_y = bar_start_y + ((${player_icon_font_size} + 16) / 2);
+          int center_x = ${display_width} / 2;
+          int bar_start_y = ${display_height} - ${icon_bar_height};
+          int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
 
           it.fill(id(color_dark_gray));
-
-          // Pagina Titel
           it.print(center_x, 20, id(font_title), id(color_white), TextAlign::CENTER, "Favoriete Albums");
           it.line(20, 38, 300, 38, id(color_light_gray));
 
-          // Wis de oude lijst en vul de globale vector opnieuw met schone namen
-          id(global_albums).clear();
-          std::string raw_options = id(ha_album_options_list).has_state() ? id(ha_album_options_list).state : "";
-          
-          if (!raw_options.empty() && raw_options != "Laden..." && raw_options != "Geen favorieten gevonden") {
-            std::stringstream ss(raw_options);
-            std::string item;
-            while (std::getline(ss, item, ',')) {
-              if (!item.empty()) {
-                size_t start = item.find_first_not_of(" []\"'");
-                size_t end = item.find_last_not_of(" []\"'");
-                if (start != std::string::npos && end != std::string::npos) {
-                  id(global_albums).push_back(item.substr(start, end - start + 1));
-                }
-              }
-            }
-          }
-
           std::string current_playing = id(ha_album).has_state() ? id(ha_album).state : "";
 
-          // Failsafe: Als de lijst leeg is
           if (id(global_albums).empty()) {
             it.print(center_x, 110, id(font_artist), id(color_light_gray), TextAlign::CENTER, "Geen favorieten gevonden");
             it.print(center_x, 140, id(font_artist), id(color_dark_gray), TextAlign::CENTER, "Markeer favorieten in Music Assistant");
-            it.line(0, bar_start_y, 320, bar_start_y, id(color_light_gray));
+            it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
             return;
           }
 
-          // Teken de 3 rijen albums (Gebruik vanaf nu id(global_albums))
           int start_index = id(album_page_index) * 3;
-          int y_offset = 50;
-          int row_height = 36;  
-          int spacing = 8;
+          int y_offset = ${list_y_offset};
+          int row_height = ${list_row_height};
+          int spacing = ${list_row_spacing};
 
           for (int i = 0; i < 3; i++) {
             int current_idx = start_index + i;
             if (current_idx >= id(global_albums).size()) break;
 
-            std::string station_name = id(global_albums)[current_idx];
-
+            std::string album_name = id(global_albums)[current_idx];
             int current_y = y_offset + (i * (row_height + spacing));
-
-            bool is_active = (current_playing == station_name);
+            bool is_active = (current_playing == album_name);
 
             if (is_active) {
               it.filled_rectangle(20, current_y, 280, row_height, id(color_green));
-              it.print(center_x, current_y + (row_height/2), id(font_artist), id(color_dark_gray), TextAlign::CENTER, station_name.c_str());
+              it.print(center_x, current_y + (row_height / 2), id(font_artist), id(color_dark_gray), TextAlign::CENTER, album_name.c_str());
             } else {
               it.filled_rectangle(20, current_y, 280, row_height, id(color_light_gray));
-              it.print(center_x, current_y + (row_height/2), id(font_artist), id(color_white), TextAlign::CENTER, station_name.c_str());
+              it.print(center_x, current_y + (row_height / 2), id(font_artist), id(color_white), TextAlign::CENTER, album_name.c_str());
             }
           }
 
-          // Knoppenbalk onderaan
-          it.line(0, bar_start_y, 320, bar_start_y, id(color_light_gray));
+          it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
           int total_pages = (id(global_albums).size() + 2) / 3;
-          
-          if (id(album_page_index) > 0) {
-            it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE045");
-          } else {
-            it.print(40, icon_center_y, id(font_icons), id(color_dark_gray), TextAlign::CENTER, "\uE045");
-          }
-          
-          std::string page_text = esphome::str_sprintf("%d / %d", id(album_page_index) + 1, total_pages);
-          it.print(center_x, icon_center_y, id(font_artist), id(color_dark_gray), TextAlign::CENTER, page_text.c_str());
 
-          if ((start_index + 3) < id(global_albums).size()) {
-            it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE044");
-          } else {
-            it.print(280, icon_center_y, id(font_icons), id(color_dark_gray), TextAlign::CENTER, "\uE044");
-          }
+          it.print(40, icon_center_y, id(font_icons), id(album_page_index) > 0 ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE045");
+          it.print(center_x, icon_center_y, id(font_artist), id(color_dark_gray), TextAlign::CENTER,
+                   esphome::str_sprintf("%d / %d", id(album_page_index) + 1, total_pages).c_str());
+          it.print(280, icon_center_y, id(font_icons), (start_index + 3) < id(global_albums).size() ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE044");
 
-
-      # ==============================================================================
-      # PAGINA 4: INSTELLINGEN (settings_page)
-      # ==============================================================================
       - id: settings_page
         lambda: |-
-          int center_x = 160;
+          int center_x = ${display_width} / 2;
           it.fill(id(color_dark_gray));
 
-          // 1. Pagina Titel
           it.print(center_x, 25, id(font_title), id(color_white), TextAlign::CENTER, "Systeem Instellingen");
           it.line(20, 45, 300, 45, id(color_light_gray));
 
-          // 2. WiFi Status
           it.print(30, 80, id(font_artist), id(color_white), TextAlign::LEFT, "WiFi Signaal:");
           if (id(wifi_percent).has_state()) {
-            std::string wifi_str = str_sprintf("%.0f %%", id(wifi_percent).state);
-            it.print(290, 80, id(font_artist), id(color_green), TextAlign::RIGHT, wifi_str.c_str());
+            it.print(290, 80, id(font_artist), id(color_green), TextAlign::RIGHT,
+                     esphome::str_sprintf("%.0f %%", id(wifi_percent).state).c_str());
           } else {
             it.print(290, 80, id(font_artist), id(color_light_gray), TextAlign::RIGHT, "N/A");
           }
 
-          // 3. Interne Speaker Status
           it.print(30, 120, id(font_artist), id(color_white), TextAlign::LEFT, "Interne Speaker:");
           if (id(speaker_enable).state) {
             it.print(290, 120, id(font_artist), id(color_green), TextAlign::RIGHT, "AAN");
@@ -1076,16 +834,12 @@ display:
             it.print(290, 120, id(font_artist), id(color_red), TextAlign::RIGHT, "UIT");
           }
 
-          // 4. IP Adres (Met correcte indexering naar het eerste actieve IPv4 adres)
           char buf[esphome::network::IP_ADDRESS_BUFFER_SIZE];
-          std::string ip_str = "Niet verbonden";
           if (id(wifi_wificomponent).is_connected()) {
             id(wifi_wificomponent).get_ip_addresses()[0].str_to(buf);
-            ip_str = buf;
-            it.print(center_x, 170, id(font_artist), id(color_light_gray), TextAlign::CENTER, ip_str.c_str());
+            it.print(center_x, 170, id(font_artist), id(color_light_gray), TextAlign::CENTER, buf);
           } else {
-            it.print(center_x, 170, id(font_artist), id(color_red), TextAlign::CENTER, "Verbinden... ");
+            it.print(center_x, 170, id(font_artist), id(color_red), TextAlign::CENTER, "Verbinden...");
           }
 
-          // 5. Helppunt onderaan
           it.print(center_x, 215, id(font_artist), id(color_light_gray), TextAlign::CENTER, "[ Druk Rode Cirkel voor Speler ]");
