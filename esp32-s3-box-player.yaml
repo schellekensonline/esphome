@@ -81,6 +81,10 @@ globals:
     initial_value: '0'
   - id: global_albums
     type: std::vector<std::string>
+  - id: progress_bar_offset
+    type: int
+    restore_value: no
+    initial_value: '0'
 
 sendspin:
   id: sendspin_hub
@@ -92,7 +96,7 @@ http_request:
 
 # IMPROVED: periodic refresh so scrolling titles actually animate
 interval:
-  - interval: 500ms
+  - interval: 1000ms
     then:
       - if:
           condition:
@@ -421,7 +425,7 @@ sensor:
     name: "Track Progress"
     type: track_progress
     id: track_progress
-    update_interval: 500ms
+    update_interval: 1000ms
 
   - platform: sendspin
     name: "Track Duration"
@@ -821,7 +825,7 @@ display:
             it.print(center_x, ${artist_y}, id(font_normal), id(color_dark_gray), TextAlign::CENTER, "Onbekende artiest");
           }
 
-          
+          // --- Album Art ---
           int bar_start_y = ${display_height} - ${icon_bar_height};
           int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
           int tekst_onderkant_y = ${artist_y} + (${normal_font_size} / 2);
@@ -885,6 +889,7 @@ display:
             };
 
             if (has_duration) {
+              // Normal songs with duration as well playing as paused
               uint32_t duration_ms = (uint32_t) id(track_duration).state;
               float ratio = (float) progress_ms / (float) duration_ms;
               if (ratio < 0.0f) ratio = 0.0f;
@@ -896,19 +901,22 @@ display:
               // LIVE + playing: sliding thick segment over gray track
               int segment_w = progress_bar_width / 5;
               if (segment_w < 16) segment_w = 16;
-              int offset = (millis() / 40) % (progress_bar_width - segment_w + 1);
-              draw_thick_line(progress_bar_left + offset, progress_bar_left + offset + segment_w, id(color_white));
-
+              id(progress_bar_offset) = (millis() / 40) % (progress_bar_width - segment_w + 1);
+              draw_thick_line(progress_bar_left + id(progress_bar_offset), progress_bar_left + id(progress_bar_offset) + segment_w, bar_color);
             } else {
+              int segment_w = progress_bar_width / 5;
+              if (segment_w < 16) segment_w = 16;
+              // id(progress_bar_offset) = (millis() / 40) % (progress_bar_width - segment_w + 1); // no progress update
+              draw_thick_line(progress_bar_left + id(progress_bar_offset), progress_bar_left + id(progress_bar_offset) + segment_w, bar_color);
               // LIVE + paused/stopped: frozen thick marker
-              uint32_t cap_ms = 4 * 60 * 60 * 1000UL;
-              float ratio = (float) progress_ms / (float) cap_ms;
-              if (ratio > 0.9f) ratio = 0.9f;
-              int pos = (int) (ratio * progress_bar_width);
-              int segment_w = 16;
-              if (pos + segment_w > progress_bar_width) pos = progress_bar_width - segment_w;
-              if (pos < 0) pos = 0;
-              draw_thick_line(progress_bar_left + pos, progress_bar_left + pos + segment_w, bar_color);
+              // uint32_t cap_ms = 4 * 60 * 60 * 1000UL;
+              // float ratio = (float) progress_ms / (float) cap_ms;
+              // if (ratio > 0.9f) ratio = 0.9f;
+              // int pos = (int) (ratio * progress_bar_width);
+              // int segment_w = 16;
+              // if (pos + segment_w > progress_bar_width) pos = progress_bar_width - segment_w;
+              // if (pos < 0) pos = 0;
+              // draw_thick_line(progress_bar_left + pos, progress_bar_left + pos + segment_w, bar_color);
             }
           }
 
