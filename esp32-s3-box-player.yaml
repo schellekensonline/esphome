@@ -7,22 +7,29 @@ substitutions:
   speaker_timeout: 500ms
 
   # Display layout — change fonts here, touch zones follow automatically
-  display_width: "320"
-  display_height: "240"
   max_title_length: "22"
   max_artist_length: "26"
   title_font_size: "24"
-  artist_font_size: "18"
+  normal_font_size: "18"
+
   player_icon_font_size: "28"
   icon_bar_height: "44"          # IMPROVED: player_icon_font_size + 16
   player_icon_touch_ymax: "196"  # IMPROVED: display_height - icon_bar_height
-  title_y: "24"
-  artist_y: "54"
+
+
+  display_width: "320"
+  display_height: "240"
+  title_y: "20"
+  artist_y: "50"
+  title_line_y: "38"
   list_y_offset: "50"
   list_row_height: "36"
   list_row_spacing: "8"
   list_touch_ymax: "174"         # IMPROVED: y offset + 3 rows
   page_nav_y_min: "190"
+  text_margin_x: "20"
+  time_margin_x: "8"
+
 
 esphome:
   name: ${name}
@@ -410,6 +417,24 @@ sensor:
     unit_of_measurement: "%"
     entity_category: diagnostic
 
+  - platform: sendspin
+    name: "Track Progress"
+    type: track_progress
+    id: track_progress
+    update_interval: 500ms
+
+  - platform: sendspin
+    name: "Track Duration"
+    type: track_duration
+    id: track_duration
+
+#   - platform: sendspin
+#     name: "Track Number"
+#     type: track
+#   - platform: sendspin
+#     name: "Year"
+#     type: year
+
 binary_sensor:
   - platform: gpio
     pin:
@@ -593,13 +618,114 @@ binary_sensor:
       then:
         - script.execute: album_page_next
 
+  # STATE AND SETTINGS PAGE
+  - platform: touchscreen
+    id: btn_bright_down
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [settings_page]
+    x_min: 0
+    x_max: 80
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - light.control:
+            id: backlight
+            state: !lambda |-
+              return true; // Backlight is altijd aan
+            brightness: !lambda |-
+              float current = id(backlight).remote_values.get_brightness();
+              if (!id(backlight).remote_values.is_on()) {
+                current = 0.50; // start on 50%
+              }
+              
+              // 1. Reken om naar procenten (bijv. 43.2%)
+              float pct = current * 100.0;
+              
+              // 2. Rond af naar het dichtstbijzijnde veelvoud van 5 en tel er 5 bij op
+              // (Bijv: 43.2 / 5 = 8.64 -> round(8.64) = 9.0 -> 9.0 * 5 = 45% -> + 5% = 50%)
+              float next_pct = round(pct / 5.0) * 5.0 - 5.0;
+              
+              // 3. Reken weer terug naar een float tussen 0.0 en 1.0
+              float next = next_pct / 100.0;
+              
+              if (next < 0.05) next = 0.05;
+              return next;
+        # - component.update: s3_box_display
+
+
+  - platform: touchscreen
+    id: btn_bright_up
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [settings_page]
+    x_min: 80
+    x_max: 160
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - light.control:
+            id: backlight
+            state: !lambda |-
+              return true; // Backlight is altijd aan
+            brightness: !lambda |-
+              float current = id(backlight).remote_values.get_brightness();
+              if (!id(backlight).remote_values.is_on()) {
+                current = 0.50; // start on 50%
+              }
+              
+              // 1. Reken om naar procenten (bijv. 43.2%)
+              float pct = current * 100.0;
+              
+              // 2. Rond af naar het dichtstbijzijnde veelvoud van 5 en tel er 5 bij op
+              // (Bijv: 43.2 / 5 = 8.64 -> round(8.64) = 9.0 -> 9.0 * 5 = 45% -> + 5% = 50%)
+              float next_pct = round(pct / 5.0) * 5.0 + 5.0;
+              
+              // 3. Reken weer terug naar een float tussen 0.0 en 1.0
+              float next = next_pct / 100.0;
+              
+              if (next > 1.0) next = 1.0;
+              return next;
+        # - component.update: s3_box_display
+
+  - platform: touchscreen
+    id: btn_volume_down
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [settings_page]
+    x_min: 160
+    x_max: 240
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - media_player.volume_down: pcm5101_player
+        # - component.update: s3_box_display
+
+  - platform: touchscreen
+    id: btn_volume_up
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [settings_page]
+    x_min: 240
+    x_max: ${display_width}
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - media_player.volume_up: pcm5101_player
+        # - component.update: s3_box_display
+
+
 font:
   - file: "gfonts://Roboto"
     id: font_title
     size: ${title_font_size}
   - file: "gfonts://Roboto"
-    id: font_artist
-    size: ${artist_font_size}
+    id: font_normal
+    size: ${normal_font_size}
   - file: "gfonts://Material Symbols Outlined"
     id: font_icons
     size: ${player_icon_font_size}
@@ -611,6 +737,12 @@ font:
       - "\uE050" # unmuted
       - "\uE04F" # muted
       - "\uE034" # pause
+      - "\uE04E" # Volume DOWN
+      - "\uE04D" # Volume UP
+      - "\uF7EC" # Backlight DOWN
+      - "\uF7ED" # Backlight UP
+
+
 color:
   - id: color_white
     red: 100%
@@ -662,6 +794,7 @@ display:
           int center_x = ${display_width} / 2;
           it.fill(id(color_dark_gray));
 
+          // --- Title ---
           if (id(sendspin_title).has_state()) {
             std::string title = id(sendspin_title).state;
             if (title.length() > ${max_title_length}) {
@@ -677,22 +810,109 @@ display:
             it.print(center_x, ${title_y}, id(font_title), id(color_light_gray), TextAlign::CENTER, "Geen muziek");
           }
 
+          // --- Artist ---
           if (id(sendspin_artist).has_state()) {
             std::string artist = id(sendspin_artist).state;
             if (artist.length() > ${max_artist_length}) {
               artist = artist.substr(0, ${max_artist_length} - 3) + "...";
             }
-            it.print(center_x, ${artist_y}, id(font_artist), id(color_light_gray), TextAlign::CENTER, artist.c_str());
+            it.print(center_x, ${artist_y}, id(font_normal), id(color_light_gray), TextAlign::CENTER, artist.c_str());
           } else {
-            it.print(center_x, ${artist_y}, id(font_artist), id(color_dark_gray), TextAlign::CENTER, "Onbekende artiest");
+            it.print(center_x, ${artist_y}, id(font_normal), id(color_dark_gray), TextAlign::CENTER, "Onbekende artiest");
           }
 
+          
           int bar_start_y = ${display_height} - ${icon_bar_height};
           int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
-          int tekst_onderkant_y = ${artist_y} + (${artist_font_size} / 2);
+          int tekst_onderkant_y = ${artist_y} + (${normal_font_size} / 2);
           int image_center_y = tekst_onderkant_y + ((bar_start_y - tekst_onderkant_y) / 2);
 
           it.image(center_x, image_center_y, id(mass_album_art), ImageAlign::CENTER);
+
+          // --- Progress / duration bar ---
+          const int time_y = bar_start_y - ${normal_font_size};
+          const int progress_bar_y  = bar_start_y - 3;
+          const int progress_bar_left = ${time_margin_x};
+          const int progress_bar_right = ${display_width} - ${time_margin_x};
+          const int progress_bar_width = progress_bar_right - progress_bar_left;
+
+          auto format_time = [](uint32_t ms) -> std::string {
+            uint32_t total_sec = ms / 1000;
+            uint32_t hours = total_sec / 3600;
+            uint32_t minutes = (total_sec % 3600) / 60;
+            uint32_t seconds = total_sec % 60;
+            char buf[16];
+            if (hours > 0) {
+              snprintf(buf, sizeof(buf), "%u:%02u:%02u", hours, minutes, seconds);
+            } else {
+              snprintf(buf, sizeof(buf), "%u:%02u", minutes, seconds);
+            }
+            return std::string(buf);
+          };
+
+          bool is_playing = id(pcm5101_player).state == 2;
+          bool has_track = id(sendspin_title).has_state();
+          bool has_progress = id(track_progress).has_state();
+          bool has_duration = id(track_duration).has_state() && id(track_duration).state > 0.0f;
+          Color time_color = is_playing ? id(color_white) : id(color_light_gray);
+          Color bar_color = is_playing ? id(color_white) : id(color_light_gray);
+
+          if (has_track && has_progress) {
+            uint32_t progress_ms = (uint32_t) id(track_progress).state;
+
+            // Left: elapsed (frozen while paused — sensor holds last value)
+            it.print(${time_margin_x}, time_y, id(font_normal), time_color, TextAlign::CENTER_LEFT,
+                     format_time(progress_ms).c_str());
+
+            // Right: duration or LIVE
+            if (has_duration) {
+              it.print(${display_width} - ${time_margin_x}, time_y, id(font_normal), id(color_light_gray),
+                       TextAlign::CENTER_RIGHT, format_time((uint32_t) id(track_duration).state).c_str());
+            } else {
+              Color live_color = is_playing ? id(color_green) : id(color_light_gray);
+              it.print(${display_width} - ${time_margin_x}, time_y, id(font_normal), live_color,
+                       TextAlign::CENTER_RIGHT, "LIVE");
+            }
+
+            // Full-width gray track --> NO USE EXISTING LINE
+            //it.line(progress_bar_left, progress_bar_y, progress_bar_right, progress_bar_y, id(color_light_gray)); 
+
+            auto draw_thick_line = [&](int x1, int x2, Color color) {
+              if (x2 <= x1) return;
+              it.line(x1, progress_bar_y - 1, x2, progress_bar_y - 1, color);
+              it.line(x1, progress_bar_y,     x2, progress_bar_y,     color);
+              it.line(x1, progress_bar_y + 1, x2, progress_bar_y + 1, color);
+            };
+
+            if (has_duration) {
+              uint32_t duration_ms = (uint32_t) id(track_duration).state;
+              float ratio = (float) progress_ms / (float) duration_ms;
+              if (ratio < 0.0f) ratio = 0.0f;
+              if (ratio > 1.0f) ratio = 1.0f;
+              int fill_w = (int) (ratio * progress_bar_width);
+              draw_thick_line(progress_bar_left, progress_bar_left + fill_w, bar_color);
+
+            } else if (is_playing) {
+              // LIVE + playing: sliding thick segment over gray track
+              int segment_w = progress_bar_width / 5;
+              if (segment_w < 16) segment_w = 16;
+              int offset = (millis() / 40) % (progress_bar_width - segment_w + 1);
+              draw_thick_line(progress_bar_left + offset, progress_bar_left + offset + segment_w, id(color_white));
+
+            } else {
+              // LIVE + paused/stopped: frozen thick marker
+              uint32_t cap_ms = 4 * 60 * 60 * 1000UL;
+              float ratio = (float) progress_ms / (float) cap_ms;
+              if (ratio > 0.9f) ratio = 0.9f;
+              int pos = (int) (ratio * progress_bar_width);
+              int segment_w = 16;
+              if (pos + segment_w > progress_bar_width) pos = progress_bar_width - segment_w;
+              if (pos < 0) pos = 0;
+              draw_thick_line(progress_bar_left + pos, progress_bar_left + pos + segment_w, bar_color);
+            }
+          }
+
+          // --- Icon bar ---
           it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
 
           it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE045");    // prev
@@ -719,14 +939,14 @@ display:
           int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
 
           it.fill(id(color_dark_gray));
-          it.print(center_x, 20, id(font_title), id(color_white), TextAlign::CENTER, "Favoriete Zenders");
-          it.line(20, 38, 300, 38, id(color_light_gray));
+          it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, "Favoriete Zenders");
+          it.line(${text_margin_x}, ${title_line_y}, ${display_width}-${text_margin_x}, ${title_line_y}, id(color_light_gray));
 
           std::string current_playing = id(ha_radio_station).has_state() ? id(ha_radio_station).state : "";
 
           if (id(global_stations).empty()) {
-            it.print(center_x, 110, id(font_artist), id(color_light_gray), TextAlign::CENTER, "Geen favorieten gevonden");
-            it.print(center_x, 140, id(font_artist), id(color_dark_gray), TextAlign::CENTER, "Markeer favorieten in Music Assistant");
+            it.print(center_x, 110, id(font_normal), id(color_light_gray), TextAlign::CENTER, "Geen favorieten gevonden");
+            it.print(center_x, 140, id(font_normal), id(color_dark_gray), TextAlign::CENTER, "Markeer favorieten in Music Assistant");
             it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
             return;
           }
@@ -734,6 +954,7 @@ display:
           int start_index = id(radio_page_index) * 3;
           int y_offset = ${list_y_offset};
           int row_height = ${list_row_height};
+          int row_width = ${display_width}-(${text_margin_x}*2);
           int spacing = ${list_row_spacing};
 
           for (int i = 0; i < 3; i++) {
@@ -745,11 +966,11 @@ display:
             bool is_active = (current_playing == station_name);
 
             if (is_active) {
-              it.filled_rectangle(20, current_y, 280, row_height, id(color_green));
-              it.print(center_x, current_y + (row_height / 2), id(font_artist), id(color_dark_gray), TextAlign::CENTER, station_name.c_str());
+              it.filled_rectangle(${text_margin_x}, current_y, row_width, row_height, id(color_green));
+              it.print(center_x, current_y + (row_height / 2), id(font_normal), id(color_dark_gray), TextAlign::CENTER, station_name.c_str());
             } else {
-              it.filled_rectangle(20, current_y, 280, row_height, id(color_light_gray));
-              it.print(center_x, current_y + (row_height / 2), id(font_artist), id(color_white), TextAlign::CENTER, station_name.c_str());
+              it.filled_rectangle(${text_margin_x}, current_y, row_width, row_height, id(color_light_gray));
+              it.print(center_x, current_y + (row_height / 2), id(font_normal), id(color_white), TextAlign::CENTER, station_name.c_str());
             }
           }
 
@@ -757,26 +978,26 @@ display:
           int total_pages = (id(global_stations).size() + 2) / 3;
 
           it.print(40, icon_center_y, id(font_icons), id(radio_page_index) > 0 ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE045");
-          it.print(center_x, icon_center_y, id(font_artist), id(color_dark_gray), TextAlign::CENTER,
+          it.print(center_x, icon_center_y, id(font_normal), id(color_dark_gray), TextAlign::CENTER,
                    esphome::str_sprintf("%d / %d", id(radio_page_index) + 1, total_pages).c_str());
           it.print(280, icon_center_y, id(font_icons), (start_index + 3) < id(global_stations).size() ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE044");
 
       # IMPROVED: draw only — list is parsed in ha_album_options_list.on_value
       - id: albums_page
         lambda: |-
-          int center_x = ${display_width} / 2;
-          int bar_start_y = ${display_height} - ${icon_bar_height};
-          int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
+          const int center_x = ${display_width} / 2;
+          const int bar_start_y = ${display_height} - ${icon_bar_height};
+          const int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
 
           it.fill(id(color_dark_gray));
-          it.print(center_x, 20, id(font_title), id(color_white), TextAlign::CENTER, "Favoriete Albums");
-          it.line(20, 38, 300, 38, id(color_light_gray));
+          it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, "Favoriete Albums");
+          it.line(${text_margin_x}, ${title_line_y}, ${display_width}-${text_margin_x}, ${title_line_y}, id(color_light_gray));
 
           std::string current_playing = id(ha_album).has_state() ? id(ha_album).state : "";
 
           if (id(global_albums).empty()) {
-            it.print(center_x, 110, id(font_artist), id(color_light_gray), TextAlign::CENTER, "Geen favorieten gevonden");
-            it.print(center_x, 140, id(font_artist), id(color_dark_gray), TextAlign::CENTER, "Markeer favorieten in Music Assistant");
+            it.print(center_x, 110, id(font_normal), id(color_light_gray), TextAlign::CENTER, "Geen favorieten gevonden");
+            it.print(center_x, 140, id(font_normal), id(color_dark_gray), TextAlign::CENTER, "Markeer favorieten in Music Assistant");
             it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
             return;
           }
@@ -784,6 +1005,7 @@ display:
           int start_index = id(album_page_index) * 3;
           int y_offset = ${list_y_offset};
           int row_height = ${list_row_height};
+          int row_width = ${display_width}-(${text_margin_x}*2);
           int spacing = ${list_row_spacing};
 
           for (int i = 0; i < 3; i++) {
@@ -795,11 +1017,11 @@ display:
             bool is_active = (current_playing == album_name);
 
             if (is_active) {
-              it.filled_rectangle(20, current_y, 280, row_height, id(color_green));
-              it.print(center_x, current_y + (row_height / 2), id(font_artist), id(color_dark_gray), TextAlign::CENTER, album_name.c_str());
+              it.filled_rectangle(${text_margin_x}, current_y, row_width, row_height, id(color_green));
+              it.print(center_x, current_y + (row_height / 2), id(font_normal), id(color_dark_gray), TextAlign::CENTER, album_name.c_str());
             } else {
-              it.filled_rectangle(20, current_y, 280, row_height, id(color_light_gray));
-              it.print(center_x, current_y + (row_height / 2), id(font_artist), id(color_white), TextAlign::CENTER, album_name.c_str());
+              it.filled_rectangle(${text_margin_x}, current_y, row_width, row_height, id(color_light_gray));
+              it.print(center_x, current_y + (row_height / 2), id(font_normal), id(color_white), TextAlign::CENTER, album_name.c_str());
             }
           }
 
@@ -807,39 +1029,70 @@ display:
           int total_pages = (id(global_albums).size() + 2) / 3;
 
           it.print(40, icon_center_y, id(font_icons), id(album_page_index) > 0 ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE045");
-          it.print(center_x, icon_center_y, id(font_artist), id(color_dark_gray), TextAlign::CENTER,
+          it.print(center_x, icon_center_y, id(font_normal), id(color_dark_gray), TextAlign::CENTER,
                    esphome::str_sprintf("%d / %d", id(album_page_index) + 1, total_pages).c_str());
           it.print(280, icon_center_y, id(font_icons), (start_index + 3) < id(global_albums).size() ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE044");
 
       - id: settings_page
         lambda: |-
-          int center_x = ${display_width} / 2;
+          int bar_start_y = ${display_height} - ${icon_bar_height};
+          int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
+          
+          const int center_x = ${display_width} / 2;
+          const int line_height = ${normal_font_size}*1.5;
+          int text_y = ${artist_y}+${normal_font_size}*0.5+(line_height); // changes add line_height for every following line CENTER alligned
+
           it.fill(id(color_dark_gray));
+          it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, "Status en Instellingen");
+          //it.line(${text_margin_x}, ${title_line_y}, ${display_width}-${text_margin_x}, ${title_line_y}, id(color_light_gray));
+          it.print(center_x, ${artist_y}, id(font_normal), id(color_light_gray), TextAlign::CENTER, "Druk rode cirkel voor volgende pagina");
 
-          it.print(center_x, 25, id(font_title), id(color_white), TextAlign::CENTER, "Systeem Instellingen");
-          it.line(20, 45, 300, 45, id(color_light_gray));
-
-          it.print(30, 80, id(font_artist), id(color_white), TextAlign::LEFT, "WiFi Signaal:");
+          // First line
+          it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "WiFi:");
           if (id(wifi_percent).has_state()) {
-            it.print(290, 80, id(font_artist), id(color_green), TextAlign::RIGHT,
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_RIGHT,
                      esphome::str_sprintf("%.0f %%", id(wifi_percent).state).c_str());
           } else {
-            it.print(290, 80, id(font_artist), id(color_light_gray), TextAlign::RIGHT, "N/A");
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_red), TextAlign::CENTER_RIGHT, "N/A");
           }
-
-          it.print(30, 120, id(font_artist), id(color_white), TextAlign::LEFT, "Interne Speaker:");
-          if (id(speaker_enable).state) {
-            it.print(290, 120, id(font_artist), id(color_green), TextAlign::RIGHT, "AAN");
-          } else {
-            it.print(290, 120, id(font_artist), id(color_red), TextAlign::RIGHT, "UIT");
-          }
-
           char buf[esphome::network::IP_ADDRESS_BUFFER_SIZE];
           if (id(wifi_wificomponent).is_connected()) {
             id(wifi_wificomponent).get_ip_addresses()[0].str_to(buf);
-            it.print(center_x, 170, id(font_artist), id(color_light_gray), TextAlign::CENTER, buf);
+            it.print(center_x, text_y, id(font_normal), id(color_light_gray), TextAlign::CENTER, buf);
           } else {
-            it.print(center_x, 170, id(font_artist), id(color_red), TextAlign::CENTER, "Verbinden...");
+            it.print(center_x, text_y, id(font_normal), id(color_red), TextAlign::CENTER, "Verbinden...");
           }
 
-          it.print(center_x, 215, id(font_artist), id(color_light_gray), TextAlign::CENTER, "[ Druk Rode Cirkel voor Speler ]");
+          // Second line
+          text_y = text_y+line_height;
+          it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Interne Speaker:");
+          if (id(speaker_enable).state) {
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_green), TextAlign::CENTER_RIGHT, "AAN");
+          } else {
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_red), TextAlign::CENTER_RIGHT, "UIT");
+          }
+
+          // Third line
+          text_y = text_y+line_height;
+          float volume_percent = id(pcm5101_player).volume * 100.0;
+          it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Volume:");
+          it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_RIGHT, 
+                    esphome::str_sprintf("%.0f %%", volume_percent).c_str());
+
+          // Fourth line
+          text_y = text_y+line_height;
+          float brightness_percent = id(backlight).remote_values.get_brightness() * 100.0;
+          it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Brightness:");
+          it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_RIGHT, 
+                    esphome::str_sprintf("%.0f %%", brightness_percent).c_str());
+
+          // --- Icon bar ---
+          it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
+
+          it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uF7EC");  // Backlight down
+
+          it.print(120, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uF7ED"); // Backlight up
+
+          it.print(200, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE04E"); // Volume down
+
+          it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE04D");   // Volume up
