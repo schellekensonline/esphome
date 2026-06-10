@@ -454,7 +454,6 @@ sensor:
     internal: true
     update_interval: 1000ms
 
-
   - platform: sendspin
     name: "Track Duration"
     type: track_duration
@@ -468,6 +467,11 @@ sensor:
 #     name: "Year"
 #     type: year
 #     internal: true
+
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    update_interval: 60s
 
 binary_sensor:
   - platform: gpio
@@ -818,6 +822,9 @@ font:
       - "\uE04D" # Volume UP
       - "\uF7EC" # Backlight DOWN
       - "\uF7ED" # Backlight UP
+      # --- REPARATIE: Universele Wi-Fi Iconen ---
+      - "\uE63E" # Wi-Fi uit / Geen verbinding (signal_wifi_off)
+      - "\uE62E" # Standaard Wi-Fi Logo voor actieve verbinding (wifi)
 
 
 color:
@@ -845,6 +852,10 @@ color:
     red: 60%
     green: 60%
     blue: 60%
+  - id: color_amber
+    red: 100%
+    green: 75%
+    blue: 0%
 
 spi:
   - id: spi_bus
@@ -1139,22 +1150,34 @@ display:
           int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
           
           const int center_x = ${display_width} / 2;
-          const int line_height = ${font_size_normal}*1.5;
-          int text_y = ${artist_y}+${font_size_normal}*0.5+(line_height); // changes add line_height for every following line CENTER alligned
+          const int line_height = ${font_size_normal} * 1.5;
+          int text_y = ${artist_y} + ${font_size_normal} * 0.5 + (line_height);
 
           it.fill(id(color_black));
           it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, "Status en Instellingen");
-          //it.line(${text_margin_x}, ${title_line_y}, ${display_width}-${text_margin_x}, ${title_line_y}, id(color_light_gray));
           it.print(center_x, ${artist_y}, id(font_normal), id(color_light_gray), TextAlign::CENTER, "Druk rode cirkel voor volgende pagina");
 
-          // First line
+          // --- Regel 1: WiFi Status met dynamisch gekleurd percentage ---
           it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "WiFi:");
-          if (id(wifi_percent).has_state()) {
-            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_RIGHT,
-                     esphome::str_sprintf("%.0f %%", id(wifi_percent).state).c_str());
+          
+          if (id(wifi_percent).has_state() && id(wifi_wificomponent).is_connected()) {
+            float pct = id(wifi_percent).state;
+            auto wifi_color = id(color_red);
+            
+            // Bepaal de kleur op basis van het percentage
+            if (pct > 75) {
+              wifi_color = id(color_green);
+            } else if (pct > 40) {
+              wifi_color = id(color_amber);
+            }
+            
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), wifi_color, TextAlign::CENTER_RIGHT,
+                     esphome::str_sprintf("%.0f %%", pct).c_str());
           } else {
             it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_red), TextAlign::CENTER_RIGHT, "N/A");
           }
+          
+          // IP-adres in het midden van de WiFi-regel
           char buf[esphome::network::IP_ADDRESS_BUFFER_SIZE];
           if (id(wifi_wificomponent).is_connected()) {
             id(wifi_wificomponent).get_ip_addresses()[0].str_to(buf);
@@ -1163,8 +1186,8 @@ display:
             it.print(center_x, text_y, id(font_normal), id(color_red), TextAlign::CENTER, "Verbinden...");
           }
 
-          // Second line
-          text_y = text_y+line_height;
+          // --- Regel 2: Interne Speaker Status ---
+          text_y += line_height;
           it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Interne Speaker:");
           if (id(speaker_enable).state) {
             it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_green), TextAlign::CENTER_RIGHT, "AAN");
@@ -1172,40 +1195,42 @@ display:
             it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_red), TextAlign::CENTER_RIGHT, "UIT");
           }
 
-          // Third line
-          // text_y = text_y+line_height;
-          // float volume_percent = id(pcm5101_player).volume * 100.0;
-          // it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Volume:");
-          // it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_RIGHT, 
-          //           esphome::str_sprintf("%.0f %%", volume_percent).c_str());
+          // --- Regel 3: Systeem Uptime ---
+          text_y += line_height;
+          it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Uptime:");
+          if (id(uptime_sensor).has_state()) {
+            float seconds = id(uptime_sensor).state;
+            int days = seconds / 86400;
+            int hours = ((int)seconds % 86400) / 3600;
+            int minutes = ((int)seconds % 3600) / 60;
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_light_gray), TextAlign::CENTER_RIGHT, 
+                     esphome::str_sprintf("%dd %du %dm", days, hours, minutes).c_str());
+          } else {
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_red), TextAlign::CENTER_RIGHT, "-");
+          }
+
+          // --- Regel 4: Vrij RAM Geheugen ---
+          text_y += line_height;
+          it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Vrij Geheugen (RAM):");
+          uint32_t free_heap = esp_get_free_heap_size() / 1024;
+          it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_light_gray), TextAlign::CENTER_RIGHT, 
+                   esphome::str_sprintf("%d KB", free_heap).c_str());
 
 
-          // Fourth line
-          // text_y = text_y+line_height;
-          // float brightness_percent = id(backlight).remote_values.get_brightness() * 100.0;
-          // it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Brightness:");
-          // it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_RIGHT, 
-          //           esphome::str_sprintf("%.0f %%", brightness_percent).c_str());
-
-
-
-          // --- Icon bar ---
+          // --- Bottom Icon Bar (Helderheid & Volume) ---
           it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
           
-          it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uF7EC");  // Backlight down
-
+          // Backlight control info
+          it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uF7EC");
           float brightness_percent = id(backlight).remote_values.get_brightness() * 100.0;
           it.print(80, icon_center_y, id(font_small), id(color_white), TextAlign::CENTER, 
                       esphome::str_sprintf("%.0f %%", brightness_percent).c_str());
+          it.print(120, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uF7ED");
 
-          it.print(120, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uF7ED"); // Backlight up
-
-
-          it.print(200, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE04E"); // Volume down
-
+          // Volume control info
+          it.print(200, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE04E");
           float volume_percent = id(pcm5101_player).volume * 100.0;
           it.print(240, icon_center_y, id(font_small), id(color_white), TextAlign::CENTER, 
                       esphome::str_sprintf("%.0f %%", volume_percent).c_str());
-
-          it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE04D");   // Volume up
+          it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE04D");
 
