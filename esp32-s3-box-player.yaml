@@ -9,8 +9,8 @@ substitutions:
   speaker_timeout: 500ms
 
   # Display layout — change fonts here, touch zones follow automatically
-  max_title_length: "22"
-  max_artist_length: "26"
+  max_title_str_length: "24"
+  max_normal_str_length: "30"
   font_size_title: "24"
   font_size_normal: "18"
   font_size_small: "14"
@@ -43,8 +43,8 @@ esphome:
     - <sstream>
 
 esp32:
-  board: esp32-s3-devkitc-1
-  variant: esp32s3
+  board: esp32s3box
+  # variant: esp32s3
   framework:
     type: esp-idf
 
@@ -362,8 +362,11 @@ text_sensor:
               }
               ESP_LOGD("main", "Album art URL: %s", full_url.c_str());
               id(mass_album_art_jpg).set_url(full_url);
-              id(mass_album_art_jpg).update();
+              // We updaten hier nog NIET, zodat de audio eerst kan starten
             }
+        # TOEVOEGEN: Geef de audio-stream 400ms de tijd om de 1s buffer te vullen
+        - delay: 400ms
+        - component.update: mass_album_art_jpg
 
   - platform: homeassistant
     name: "Geselecteerde Radiozender vanaf HA"
@@ -875,11 +878,11 @@ display:
           // --- Title ---
           if (id(sendspin_title).has_state()) {
             std::string title = id(sendspin_title).state;
-            if (title.length() > ${max_title_length}) {
+            if (title.length() > ${max_title_str_length}) {
               title += "        ";
               int scroll_pos = (millis() / 150) % title.length();
               std::string scrolled_title = title.substr(scroll_pos) + title.substr(0, scroll_pos);
-              scrolled_title = scrolled_title.substr(0, ${max_title_length});
+              scrolled_title = scrolled_title.substr(0, ${max_title_str_length});
               it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, scrolled_title.c_str());
             } else {
               it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, title.c_str());
@@ -891,8 +894,8 @@ display:
           // --- Artist ---
           if (id(sendspin_artist).has_state()) {
             std::string artist = id(sendspin_artist).state;
-            if (artist.length() > ${max_artist_length}) {
-              artist = artist.substr(0, ${max_artist_length} - 3) + "...";
+            if (artist.length() > ${max_normal_str_length}) {
+              artist = artist.substr(0, ${max_normal_str_length} - 3) + "...";
             }
             it.print(center_x, ${artist_y}, id(font_normal), id(color_light_gray), TextAlign::CENTER, artist.c_str());
           } else {
@@ -1051,9 +1054,13 @@ display:
             int current_idx = start_index + i;
             if (current_idx >= id(global_stations).size()) break;
 
-            std::string station_name = id(global_stations)[current_idx];
-            int current_y = y_offset + (i * (row_height + spacing));
+          
+            std::string station_name = id(global_stations)[current_idx];         
             bool is_active = (current_playing == station_name);
+            int current_y = y_offset + (i * (row_height + spacing));
+            if (station_name.length() > ${max_normal_str_length}) {
+              station_name = station_name.substr(0, ${max_normal_str_length} - 3) + "...";
+            }
 
             if (is_active) {
               it.filled_rectangle(${text_margin_x}, current_y, row_width, row_height, id(color_green));
@@ -1105,6 +1112,9 @@ display:
             std::string album_name = id(global_albums)[current_idx];
             int current_y = y_offset + (i * (row_height + spacing));
             bool is_active = (current_playing == album_name);
+            if (album_name.length() > ${max_normal_str_length}) {
+              album_name = album_name.substr(0, ${max_normal_str_length} - 3) + "...";
+            }
 
             if (is_active) {
               it.filled_rectangle(${text_margin_x}, current_y, row_width, row_height, id(color_green));
