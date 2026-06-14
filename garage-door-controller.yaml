@@ -1,6 +1,6 @@
 esphome:
   name: garage-door-controller
-  friendly_name: "garage door"
+  friendly_name: "garage door controller"
 
 esp32:
   board: esp32dev
@@ -30,115 +30,153 @@ wifi:
 # The captive portal component in ESPHome is a fallback mechanism for when connecting to the configured WiFi fails.
 captive_portal:
 
-## Relay outputs
-#  note: GPIO 5 is a strapping/boot pin
-switch:
-  - platform: gpio
-    pin: 
-      number: GPIO23
-      inverted: true
-    name: "Relay 1"
-    id: OUT1
-    on_turn_on:
-      - delay: 500ms
-      - switch.turn_off: OUT1
-  - platform: gpio
-    pin: 
-      number: GPIO5
-      inverted: true
-    name: "Relay 2"
-    id: OUT2
-    # on_turn_on:
-    #   - delay: 500ms
-    #   - switch.turn_off: OUT2
-  - platform: gpio
-    pin: 
-      number: GPIO4
-      inverted: true
-    name: "Relay 3"
-    id: OUT3
-    # on_turn_on:
-    #   - delay: 500ms
-    #   - switch.turn_off: OUT3
-  - platform: gpio
-    pin: 
-      number: GPIO13
-      inverted: true
-    name: "Relay 4"
-    id: OUT4
-    # on_turn_on:
-    #   - delay: 500ms
-    #   - switch.turn_off: OUT4
-
-
 ## Digital inputs
 binary_sensor:
   - platform: gpio
+    name: "Input1 open"
+    id: IN1
     pin:
       number: GPIO25
       inverted: false
       mode:
         input: true
         pullup: true
-    name: "Input 1"
-    id: IN1
-    filters:
-      - delayed_on: 10ms
-      - delayed_off: 10ms
+    filters: # prevent relay bounce
+      - delayed_on: 20ms
+      - delayed_off: 20ms
+
+  # Interne sensor die controleert of IN1 aan het knipperen is
+  - platform: template
+    name: "Input1 flashing"
+    id: IN1_flashing
+    lambda: |-
+      static uint32_t last_state_change = 0;
+      static bool last_raw_state = false;
+      static bool flashing = false;
+      
+      bool current_state = id(IN1).state;
+      uint32_t now = millis();
+      
+      if (current_state != last_raw_state) {
+        uint32_t duration = now - last_state_change;
+        if (duration >= 500 && duration <= 1500) {
+          flashing = true;
+        } else if (duration > 2500) {
+          flashing = false;
+        }
+        last_state_change = now;
+        last_raw_state = current_state;
+      } else if (now - last_state_change > 2500) {
+        flashing = false;
+      }
+      return flashing;
+
+
+## (Relay) outputs
+switch:
   - platform: gpio
-    pin:
-      number: GPIO26
+    name: "Relay1 door control"
+    id: OUT1
+    pin: 
+      number: GPIO23
       inverted: true
-      mode:
-        input: true
-        pullup: true
-    name: "Input 2"
-    id: IN2
-    filters:
-      - delayed_on: 10ms
-      - delayed_off: 10ms
+    on_turn_on:
+      - delay: 500ms
+      - switch.turn_off: OUT1
+
   - platform: gpio
-    pin:
-      number: GPIO27
+    name: "Relay2 door locked"
+    id: OUT2
+    pin: 
+      number: GPIO5
       inverted: true
-      mode:
-        input: true
-        pullup: true
-    name: "Input 3"
-    id: IN3
-    filters:
-      - delayed_on: 10ms
-      - delayed_off: 10ms
-  - platform: gpio
-    pin:
-      number: GPIO33
-      inverted: true
-      mode:
-        input: true
-        pullup: true
-    name: "Input 4"
-    id: IN4
-    filters:
-      - delayed_on: 10ms
-      - delayed_off: 10ms
+      ignore_strapping_warning: true #  note: GPIO 5 is a strapping/boot pin
+
+  # - platform: gpio
+  #   name: "Relay 3"
+  #   id: OUT3
+  #   internal: true
+  #   pin: 
+  #     number: GPIO4
+  #     inverted: true
+  #   # on_turn_on:
+  #   #   - delay: 500ms
+  #   #   - switch.turn_off: OUT3
+
+  # - platform: gpio
+  #   name: "Relay 4"
+  #   id: OUT4
+  #   internal: true
+  #   pin: 
+  #     number: GPIO13
+  #     inverted: true
+    # on_turn_on:
+    #   - delay: 500ms
+    #   - switch.turn_off: OUT4
+
+
+  # - platform: gpio
+  #   name: "Input 2"
+  #   id: IN2
+  #   internal: true
+  #   pin:
+  #     number: GPIO26
+  #     inverted: true
+  #     mode:
+  #       input: true
+  #       pullup: true
+  #   filters:
+  #     - delayed_on: 10ms
+  #     - delayed_off: 10ms
+
+  # - platform: gpio
+  #   name: "Input 3"
+  #   id: IN3
+  #   internal: true
+  #   pin:
+  #     number: GPIO27
+  #     inverted: true
+  #     mode:
+  #       input: true
+  #       pullup: true
+
+  #   filters:
+  #     - delayed_on: 10ms
+  #     - delayed_off: 10ms
+
+  # - platform: gpio
+  #   name: "Input 4"
+  #   id: IN4
+  #   internal: true
+  #   pin:
+  #     number: GPIO33
+  #     inverted: true
+  #     mode:
+  #       input: true
+  #       pullup: true
+  #   filters:
+  #     - delayed_on: 10ms
+  #     - delayed_off: 10ms
+
+
 
 ## RS485 client/master
-uart:
-  - id: uart_modbus
-    tx_pin: GPIO19
-    rx_pin: GPIO18
-    baud_rate: 9600
-    parity: NONE
-    stop_bits: 1
+# uart:
+#   - id: uart_modbus
+#     tx_pin: GPIO19
+#     rx_pin: GPIO18
+#     baud_rate: 9600
+#     parity: NONE
+#     stop_bits: 1
 
-modbus:
-  - id: modbus_client
-    uart_id: uart_modbus
-    flow_control_pin: GPIO32
+# modbus:
+#   - id: modbus_client
+#     uart_id: uart_modbus
+#     flow_control_pin: GPIO32
       
-modbus_controller:
-- id: modbus_master
-  modbus_id: modbus_client
+# modbus_controller:
+# - id: modbus_master
+#   modbus_id: modbus_client
   
 
 # ESP32-WROOM-32E N4 (4MB flash)
