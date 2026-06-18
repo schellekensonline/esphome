@@ -48,10 +48,6 @@ esp32:
   framework:
     type: esp-idf
 
-psram:
-  mode: octal
-  speed: 80MHz
-
 logger:
 
 api:
@@ -91,6 +87,10 @@ globals:
     restore_value: no
     initial_value: '0'
 
+psram:
+  mode: octal
+  speed: 80MHz
+    
 sendspin:
   id: sendspin_hub
   task_stack_in_psram: true
