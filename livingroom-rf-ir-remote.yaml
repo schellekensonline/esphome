@@ -1,0 +1,29 @@
+# Board: Generic ESP32 Board (Generic)
+# Definition: definitions/boards/generic-esp32/manifest.yaml
+
+esphome:
+  name: livingroom-rf-ir-remote
+  friendly_name: livingroom-rf-ir-remote
+
+esp32:
+  variant: esp32
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: "yPgKVIPWcb+kRu6Y3/m3SFxeguFdZ3aLVZgyiYohVSk="
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: livingroom-rf-i Fallback Hotspot
+    password: "dE4AgWDoGHd3"
+
+captive_portal:
