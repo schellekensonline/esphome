@@ -21,7 +21,7 @@ logger:
 
 api:
   encryption:
-    key: "yPgKVIPWcb+kRu6Y3/m3SFxeguFdZ3aLVZgyiYohVSk="
+    key: !secret api_key
 
 ota:
   - platform: esphome
@@ -35,7 +35,7 @@ wifi:
   password: !secret wifi_password
   ap:
     ssid: livingroom-rf-i Fallback Hotspot
-    password: "dE4AgWDoGHd3"
+    password: !secret wifi_password
 
 captive_portal:
 
