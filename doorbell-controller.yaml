@@ -25,6 +25,6 @@ wifi:
   password: !secret wifi_password
   ap:
     ssid: doorbell-contro Fallback Hotspot
-    password: "gwiWCbAipc5l"
+    password: !secret wifi_password
 
 captive_portal:
