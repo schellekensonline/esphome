@@ -3,7 +3,7 @@
 
 esphome:
   name: doorbell-controller
-  friendly_name: doorbell-controller
+  friendly_name: Doorbell controller
 
 esp32:
   variant: esp32c6
