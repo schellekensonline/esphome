@@ -69,10 +69,12 @@ remote_receiver:
   # 433MHz RF Ontvanger (RFRecv op GPIO19)
   - pin:
       number: GPIO19
-    dump:
-      - rc_switch
+    dump: all
+    tolerance: 30%    # Strakker dan 50% om foutieve Kaku-decoderingen te voorkomen
+    filter: 100us     # Filtert micro-ruis van goedkope 433MHz ontvangers weg
+    idle: 4ms         # Tijd tussen opeenvolgende RF-pakketjes
     id: rf_rx
-    tolerance: 50% 
+
 
 # --- RF & IR ZENDERS ---
 remote_transmitter:
