@@ -64,13 +64,7 @@ remote_receiver:
   - pin:
       number: GPIO33
       inverted: true
-    dump:
-      - nec
-      - sony
-      - panasonic
-      - rc5
-      - rc6
-      - pronto
+    dump: all
     filter: 50us    # Korte stoorpulsen negeren
     idle: 20ms      # Wacht tot het signaal echt stil is alvorens te loggen
     id: ir_rx
