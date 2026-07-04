@@ -1,6 +1,9 @@
 # Board: Generic ESP32-C6 Board (Generic)
 # Definition: definitions/boards/generic-esp32c6/manifest.yaml
 
+
+# RELAY 
+
 esphome:
   name: doorbell-controller
   friendly_name: Doorbell controller
@@ -28,3 +31,62 @@ wifi:
     password: !secret wifi_password
 
 captive_portal:
+
+# Relais configuratie op IO19
+switch:
+  - platform: gpio
+    name: "Bell Relay"
+    pin: GPIO19
+    id: bell_relais
+    # inverted: false # Zet op true als het relais omgekeerd werkt (Active Low)
+    restore_mode: ALWAYS_OFF # Zorgt dat het relais uit staat na stroomuitval
+
+
+# https://documentation.espressif.com/esp32-c6-wroom-1_wroom-1u_datasheet_en.pdf
+
+# ===================================================================
+#              ESP32-C6-WROOM-1-N4 MODULE PINOUT (CORRECT)
+# ===================================================================
+
+# [Pin]   [Naam]     [Type]      [Hoofdfunctie / Alternatieve functies]
+# -------------------------------------------------------------------
+#  1       GND        Power       Ground (Massa)                          TOP LEFT (antenna)
+#  2       3V3        Power       Voeding (3.3V)
+#  3       EN         Input       Chip Enable / Reset (Actief Hoog)
+#  4       IO4        I/O         GPIO4  / ADC1_CH4 / MTMS (JTAG)
+#  5       IO5        I/O         GPIO5  / ADC1_CH5 / MTDI (JTAG)
+#  6       IO6        I/O         GPIO6  / MTCK (JTAG)
+#  7       IO7        I/O         GPIO7  / MTDO (JTAG)
+#  8       IO0        I/O         GPIO0  / ADC1_CH0
+#  9       IO1        I/O         GPIO1  / ADC1_CH1
+# 10       IO8        I/O         GPIO8  / Strapping Pin (Logisch 1)
+# 11       IO10       I/O         GPIO10
+# 12       IO11       I/O         GPIO11 / USB_D+
+# 13       IO12       I/O         GPIO12 / USB_D-
+# 14       IO13       I/O         GPIO13                                  BOTTOM LEFT
+# 15       IO9        I/O         GPIO9  / Strapping Pin (Boot Mode)      BOTTOM RIGHT
+# 16       IO18       I/O         GPIO18 / SDIO_CLK
+# 17       IO19       I/O         GPIO19 / SDIO_CMD                       RELAY 
+# 18       IO20       I/O         GPIO20 / SDIO_DATA0
+# 19       IO21       I/O         GPIO21 / SDIO_DATA1
+# 20       IO22       I/O         GPIO22 / SDIO_DATA2
+# 21       IO23       I/O         GPIO23 / SDIO_DATA3
+# 22       NC         -           Niet verbonden (No Connect)
+# 23       IO15       I/O         GPIO15 / XTAL_32K_P
+# 24       RXD0       I/O         GPIO17 / UART0 Receive (U0RXD)
+# 25       TXD0       I/O         GPIO16 / UART0 Transmit (U0TXD)
+# 26       IO3        I/O         GPIO3  / ADC1_CH3
+# 27       IO2        I/O         GPIO2  / ADC1_CH2 / Strapping Pin
+# 28       GND        Power       Ground (Massa)                          TOP RIGHT (antenna) 
+# 29       GND (Pad)  Power       Centrale Ground Thermal Pad (Massa)
+
+# ===================================================================
+# * Belangrijke hardware-checks voor je PCB-layout of Code:
+# - IO9 (Pin 15) moet hoog zijn bij booten voor de normale modus.
+# - IO8 (Pin 10) en IO2 (Pin 27) zijn eveneens strapping pinnen.
+# - IO11 en IO12 (Pin 12 & 13) zijn gereserveerd voor USB Serial/JTAG.
+# - De "Keepout Zone" bij de antenne moet vrij blijven van koper!
+# ===================================================================
+
+
+
