@@ -71,6 +71,8 @@ remote_receiver:
       - rc5
       - rc6
       - pronto
+    filter: 50us    # Korte stoorpulsen negeren
+    idle: 20ms      # Wacht tot het signaal echt stil is alvorens te loggen
     id: ir_rx
 
   # 433MHz RF Ontvanger (RFRecv op GPIO19)
