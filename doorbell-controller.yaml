@@ -67,7 +67,7 @@ button:
         - switch.turn_on: deurbel_relais
         - delay: 400ms
         - switch.turn_off: deurbel_relais
-        - delay: 250ms
+        - delay: 500ms
         # Derde Ding
         - switch.turn_on: deurbel_relais
         - delay: 400ms
