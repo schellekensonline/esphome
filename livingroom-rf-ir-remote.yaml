@@ -81,10 +81,12 @@ remote_receiver:
 remote_transmitter:
   # IR Zender (IRSend op GPIO25)
   - pin: GPIO25
+    non_blocking: true  # <-- Voeg dit toe om de waarschuwing te stoppen
     carrier_duty_percent: 50%
     id: ir_tx
 
   # 433MHz RF Zender (RFSend op GPIO18)
   - pin: GPIO18
+    non_blocking: true  # <-- Voeg dit toe om de waarschuwing te stoppen
     carrier_duty_percent: 100%
     id: rf_tx
