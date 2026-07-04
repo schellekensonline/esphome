@@ -33,35 +33,50 @@ wifi:
 captive_portal:
 
 
-# Definieer de deurbel als een drukknop (button) in Home Assistant.
-# Dit is veiliger dan een switch, omdat een button na indrukken 
-# direct een vooraf geprogrammeerde actie (de sequentie) afwerkt.
+# 1. De Fysieke Knop (Input)
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO21
+      mode: INPUT_PULLUP
+      inverted: true # Zorgt dat 'true' (AAN) wordt doorgegeven als je de knop indrukt naar GND
+    name: "Doorbell Button"
+    id: fysieke_knop
+    filters:
+      - delayed_on: 50ms # Ontdender-filter (voorkomt dat de bel 2x gaat door een slechte knop)
+    # Zodra de fysieke knop wordt ingedrukt, activeert hij de Home Assistant button hieronder
+    on_press:
+      then:
+        - button.press: deurbel_sequentie
+
+# 2. De Home Assistant Drukknop & Sequentie
 button:
   - platform: template
-    name: "Deurbel Activeren"
-    id: activeer_deurbel
+    name: "Doorbell Sound"
+    id: deurbel_sequentie
     icon: "mdi:doorbell-video"
+    # Deze actie wordt nu getriggerd door ZOWEL Home Assistant als de fysieke knop!
     on_press:
       then:
         # Eerste Ding-Dong
-        - switch.turn_on: bell_relais
+        - switch.turn_on: deurbel_relais
         - delay: 400ms
-        - switch.turn_off: bell_relais
+        - switch.turn_off: deurbel_relais
         - delay: 300ms
-        # Tweede Ding-Dong (snel erachteraan)
-        - switch.turn_on: bell_relais
+        
+        # Tweede Ding-Dong
+        - switch.turn_on: deurbel_relais
         - delay: 400ms
-        - switch.turn_off: bell_relais
-  
-# Relais configuratie op IO19
+        - switch.turn_off: deurbel_relais
+
+# 3. Het Hardware Relais (Output)
 switch:
   - platform: gpio
-    name: "Bell Relay"
     pin: GPIO19
-    id: bell_relais
-    internal: true
-    # inverted: false # Zet op true als het relais omgekeerd werkt (Active Low)
-    restore_mode: ALWAYS_OFF # Zorgt dat het relais uit staat na stroomuitval
+    id: deurbel_relais
+    internal: true # Houdt de losse schakelaar verborgen in Home Assistant
+    restore_mode: ALWAYS_OFF
+
 
 
 # https://documentation.espressif.com/esp32-c6-wroom-1_wroom-1u_datasheet_en.pdf
