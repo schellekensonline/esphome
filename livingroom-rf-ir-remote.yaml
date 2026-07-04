@@ -71,7 +71,6 @@ remote_receiver:
       - rc5
       - rc6
       - pronto
-      - raw
     id: ir_rx
 
   # 433MHz RF Ontvanger (RFRecv op GPIO19)
