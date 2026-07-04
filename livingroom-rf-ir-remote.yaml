@@ -5,16 +5,11 @@ esphome:
   name: livingroom-rf-ir-remote
   friendly_name: livingroom-rf-ir-remote
 
-# esp32:
-#   variant: esp32
-#   framework:
-#     type: esp-idf
 
-# GEWIJZIGD: Jouw apparaat gebruikt een ESP32
 esp32:
   board: esp32dev
   framework:
-    type: arduino
+    type: esp-idf
 
     
 logger:
