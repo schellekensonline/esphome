@@ -32,12 +32,34 @@ wifi:
 
 captive_portal:
 
+
+# Definieer de deurbel als een drukknop (button) in Home Assistant.
+# Dit is veiliger dan een switch, omdat een button na indrukken 
+# direct een vooraf geprogrammeerde actie (de sequentie) afwerkt.
+button:
+  - platform: template
+    name: "Deurbel Activeren"
+    id: activeer_deurbel
+    icon: "mdi:doorbell-video"
+    on_press:
+      then:
+        # Eerste Ding-Dong
+        - switch.turn_on: bell_relais
+        - delay: 400ms
+        - switch.turn_off: bell_relais
+        - delay: 300ms
+        # Tweede Ding-Dong (snel erachteraan)
+        - switch.turn_on: bell_relais
+        - delay: 400ms
+        - switch.turn_off: bell_relais
+  
 # Relais configuratie op IO19
 switch:
   - platform: gpio
     name: "Bell Relay"
     pin: GPIO19
     id: bell_relais
+    internal: true
     # inverted: false # Zet op true als het relais omgekeerd werkt (Active Low)
     restore_mode: ALWAYS_OFF # Zorgt dat het relais uit staat na stroomuitval
 
