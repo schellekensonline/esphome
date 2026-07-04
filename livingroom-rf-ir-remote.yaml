@@ -64,7 +64,14 @@ remote_receiver:
   - pin:
       number: GPIO33
       inverted: true
-    dump: all
+    dump:
+      - nec
+      - sony
+      - panasonic
+      - rc5
+      - rc6
+      - pronto
+      - raw
     id: ir_rx
 
   # 433MHz RF Ontvanger (RFRecv op GPIO19)
