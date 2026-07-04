@@ -58,17 +58,21 @@ button:
     # Deze actie wordt nu getriggerd door ZOWEL Home Assistant als de fysieke knop!
     on_press:
       then:
-        # Eerste Ding-Dong
+        # Eerste Ding
         - switch.turn_on: deurbel_relais
-        - delay: 400ms
+        - delay: 500ms
         - switch.turn_off: deurbel_relais
-        - delay: 300ms
-        
-        # Tweede Ding-Dong
+        - delay: 1000ms
+        # Tweede Ding
         - switch.turn_on: deurbel_relais
-        - delay: 400ms
+        - delay: 500ms
         - switch.turn_off: deurbel_relais
-
+        - delay: 500ms
+        # Derde Ding
+        - switch.turn_on: deurbel_relais
+        - delay: 500ms
+        - switch.turn_off: deurbel_relais
+          
 # 3. Het Hardware Relais (Output)
 switch:
   - platform: gpio
