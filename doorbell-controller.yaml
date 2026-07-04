@@ -60,17 +60,17 @@ button:
       then:
         # Eerste Ding
         - switch.turn_on: deurbel_relais
-        - delay: 500ms
+        - delay: 400ms
         - switch.turn_off: deurbel_relais
-        - delay: 1000ms
+        - delay: 800ms
         # Tweede Ding
         - switch.turn_on: deurbel_relais
-        - delay: 500ms
+        - delay: 400ms
         - switch.turn_off: deurbel_relais
-        - delay: 500ms
+        - delay: 400ms
         # Derde Ding
         - switch.turn_on: deurbel_relais
-        - delay: 500ms
+        - delay: 400ms
         - switch.turn_off: deurbel_relais
           
 # 3. Het Hardware Relais (Output)
