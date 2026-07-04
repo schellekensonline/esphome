@@ -101,7 +101,6 @@ remote_receiver:
   - pin:
       number: GPIO19
     dump:
-      # - pronto        # Print remote code in Pronto form. Useful for using arbitrary protocols.
       # - raw           # Print all remote codes in their raw form. Also useful for using arbitrary protocols.
       - rc_switch     # Decode and dump RCSwitch RF codes.
       - brennenstuhl  # Decode and dump brennenstuhl RF codes.
