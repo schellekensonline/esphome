@@ -64,18 +64,13 @@ remote_receiver:
   - pin:
       number: GPIO33
       inverted: true
-    dump: all
-    filter: 50us    # Korte stoorpulsen negeren
-    idle: 20ms      # Wacht tot het signaal echt stil is alvorens te loggen
+    # dump: all
     id: ir_rx
 
   # 433MHz RF Ontvanger (RFRecv op GPIO19)
   - pin:
       number: GPIO19
-    dump: all
-    tolerance: 30%    # Strakker dan 50% om foutieve Kaku-decoderingen te voorkomen
-    filter: 100us     # Filtert micro-ruis van goedkope 433MHz ontvangers weg
-    idle: 4ms         # Tijd tussen opeenvolgende RF-pakketjes
+    # dump: all
     id: rf_rx
 
 
