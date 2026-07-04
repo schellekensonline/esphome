@@ -5,12 +5,10 @@ esphome:
   name: livingroom-rf-ir-remote
   friendly_name: livingroom-rf-ir-remote
 
-
 esp32:
   board: esp32dev
   framework:
     type: esp-idf
-
     
 logger:
 
@@ -22,8 +20,8 @@ ota:
   - platform: esphome
     password: !secret ota_password
     
-web_server:
-  port: 80
+# web_server:
+#   port: 80
    
 wifi:
   ssid: !secret wifi_ssid
@@ -64,15 +62,59 @@ remote_receiver:
   - pin:
       number: GPIO33
       inverted: true
-    # dump: all
+    dump:
+      - pronto      # Print remote code in Pronto form. Useful for using arbitrary protocols.
+      - raw         # Print all remote codes in their raw form. Also useful for using arbitrary protocols.
+      - rc5         # Decode and dump RC5 IR codes.
+      - rc6         # Decode and dump RC6 IR codes.
+      - nec         # Decode and dump NEC infrared codes.
+      - panasonic   # Decode and dump Panasonic infrared codes.
+      - sony        # Decode and dump Sony infrared codes.
+      - samsung     # Decode and dump Samsung infrared codes.
+      - samsung36   # Decode and dump Samsung36 infrared codes.
+      - abbwelcome  # Decode and dump ABB-Welcome codes. Messages are sent via copper wires. See transmitter description for more details.
+      - aeha        # Decode and dump AEHA infrared codes.
+      - beo4        # Decode and dump B&O Beo4 infrared codes.
+      - canalsat    # Decode and dump CanalSat infrared codes.
+      - canalsatld  # Decode and dump CanalSatLD infrared codes.
+      - coolix      # Decode and dump Coolix infrared codes.
+      - dish        # Decode and dump Dish infrared codes.
+      - dyson       # Decode and dump Dyson Cool AM7 tower fan codes.
+      - jvc         # Decode and dump JVC infrared codes.
+      - gobox       # Decode and dump Go-Box infrared codes.
+      - haier       # Decode and dump Haier infrared codes.
+      - lg          # Decode and dump LG infrared codes.
+      - magiquest   # Decode and dump MagiQuest wand infrared codes.
+      - midea       # Decode and dump Midea infrared codes.
+      - nexa        # Decode and dump Nexa (RF) codes.
+      - pioneer     # Decode and dump Pioneer infrared codes.
+      - roomba      # Decode and dump Roomba infrared codes.
+      - symphony    # Decode and dump Symphony infrared codes.
+      - toshiba_ac  # Decode and dump Toshiba AC infrared codes.
+      - mirage      # Decode and dump Mirage infrared codes.
+      - toto        # Decode and dump Toto infrared codes.
+    filter: 50us
+    idle: 25ms
     id: ir_rx
 
   # 433MHz RF Ontvanger (RFRecv op GPIO19)
   - pin:
       number: GPIO19
-    # dump: all
+    dump:
+      - pronto        # Print remote code in Pronto form. Useful for using arbitrary protocols.
+      - raw           # Print all remote codes in their raw form. Also useful for using arbitrary protocols.
+      - rc_switch     # Decode and dump RCSwitch RF codes.
+      - brennenstuhl  # Decode and dump brennenstuhl RF codes.
+      - byronsx       # Decode and dump Byron SX doorbell RF codes.
+      - dooya         # Decode and dump Dooya RF codes.
+      - drayton       # Decode and dump Drayton Digistat RF codes.
+      - dyson         # Decode and dump Dyson Cool AM7 tower fan codes.
+      - keeloq        # Decode and dump KeeLoq RF codes.
+      - nexa          # Decode and dump Nexa (RF) codes.
+    filter: 150us
+    tolerance: 30%
+    idle: 4ms
     id: rf_rx
-
 
 # --- RF & IR ZENDERS ---
 remote_transmitter:
