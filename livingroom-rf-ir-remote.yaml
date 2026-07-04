@@ -55,6 +55,7 @@ binary_sensor:
       number: GPIO0
       inverted: true
       mode: INPUT_PULLUP
+      ignore_strapping_warning: true 
     name: "Fysieke Knop"
 
 # --- RF & IR ONTVANGERS ---
