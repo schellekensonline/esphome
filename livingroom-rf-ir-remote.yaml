@@ -112,7 +112,7 @@ remote_receiver:
   - pin:
       number: GPIO33
       inverted: true
- #   filter: 50us
+    tolerance: 30%
     idle: 25ms
     id: ir_rx
     dump: all
