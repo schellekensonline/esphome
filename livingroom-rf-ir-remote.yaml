@@ -68,57 +68,42 @@ binary_sensor:
     receiver_id: ir_rx
     nec:
       address: 0x87EE
-      command: 0x0000
+      command: 0x015F
 
   - platform: remote_receiver
     name: "Media Player Stop"
     receiver_id: ir_rx
     nec:
-      address: 0x87EE
-      command: 0x0000
+      address: 0x87E5
+      command: 0x0131
 
   - platform: remote_receiver
     name: "Media Player Rewind"
     receiver_id: ir_rx
     nec:
       address: 0x87EE
-      command: 0x0000
+      command: 0x0109
 
   - platform: remote_receiver
     name: "Media Player Fast Forward"
     receiver_id: ir_rx
     nec:
       address: 0x87EE
-      command: 0x0000
+      command: 0x0106
 
   - platform: remote_receiver
     name: "Media Player Previous"
     receiver_id: ir_rx
     nec:
-      address: 0x87EE
-      command: 0x0000
-      
+      address: 0x87E5
+      command: 0x0125
+ 
   - platform: remote_receiver
     name: "Media Player Next"
     receiver_id: ir_rx
     nec:
-      address: 0x87EE
-      command: 0x0000
-
-  - platform: remote_receiver
-    name: "Media Player Channel Up"
-    receiver_id: ir_rx
-    nec:
-      address: 0x87EE
-      command: 0x0000
-
-  - platform: remote_receiver
-    name: "Media Player Channel Down"
-    receiver_id: ir_rx
-    nec:
-      address: 0x87EE
-      command: 0x0000
-
+      address: 0x87E5
+      command: 0x0123
   
     
 # --- RF & IR ONTVANGERS ---
