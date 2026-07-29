@@ -125,7 +125,7 @@ remote_receiver:
     on_rc_switch:
       then:
         - lambda: |-
-            id(rc_switch_rf_last).publish_state(x);
+            id(rc_switch_rf_last).publish_state(std::to_string(x.code));
   
     dump:
       # - raw           # Print all remote codes in their raw form. Also useful for using arbitrary protocols.
