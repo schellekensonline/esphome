@@ -3,7 +3,6 @@
 
 esphome:
   name: livingroom-rf-ir-remote
-  friendly_name: livingroom-rf-ir-remote
 
 esp32:
   board: esp32dev
