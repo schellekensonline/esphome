@@ -79,7 +79,8 @@ remote_receiver:
     on_beo4:
       then:
         - lambda: |-
-            std::string info = "Device: " + std::to_string(x.device) + " | Cmd: " + std::to_string(x.command);
+            // Gebruik x.source in plaats van x.device
+            std::string info = "Source: " + std::to_string(x.source) + " | Cmd: " + std::to_string(x.command);
             id(rc_switch_rf_last).publish_state(info);
     
     # on_pronto:
