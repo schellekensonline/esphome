@@ -76,10 +76,16 @@ remote_receiver:
     idle: 25ms
     id: ir_rx
 
-    on_pronto:
+    on_beo4:
       then:
         - lambda: |-
-            id(pronto_ir_last).publish_state(x.data);
+            std::string info = "Device: " + std::to_string(x.device) + " | Cmd: " + std::to_string(x.command);
+            id(rc_switch_rf_last).publish_state(info);
+    
+    # on_pronto:
+    #   then:
+    #     - lambda: |-
+    #         id(pronto_ir_last).publish_state(x.data);
     
     dump: all
     # - pronto      # Print remote code in Pronto form. Useful for using arbitrary protocols.
