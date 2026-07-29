@@ -79,7 +79,7 @@ remote_receiver:
     on_pronto:
       then:
         - lambda: |-
-            id(pronto_ir_last).publish_state(x.data);
+            id(pronto_ir_last).publish_state(std::to_string(x.data));
     
     dump: all
     # - pronto      # Print remote code in Pronto form. Useful for using arbitrary protocols.
