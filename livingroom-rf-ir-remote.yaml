@@ -93,14 +93,14 @@ binary_sensor:
       nbits: 20
 
   - platform: remote_receiver
-    name: "Media Player Previous / Channel Down"
+    name: "Media Player Previous"
     receiver_id: ir_rx
     sony:
       data: 0x000EAB47
       nbits: 20
 
   - platform: remote_receiver
-    name: "Media Player Next / Channel Up"
+    name: "Media Player Next"
     receiver_id: ir_rx
     sony:
       data: 0x0006AB47
