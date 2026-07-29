@@ -55,57 +55,57 @@ binary_sensor:
       inverted: true
       mode: INPUT_PULLUP
       ignore_strapping_warning: true 
-    
+
+## REMOTE DEVICE SONY DVD BDP-S3700 --> FOR HOMEASSISTANT      
   - platform: remote_receiver
     name: "Media Player Play"
     receiver_id: ir_rx
-    nec:
-      address: 0x87EE
-      command: 0x0105
+    sony:
+      data: 0x00058B47
+      nbits: 20
 
   - platform: remote_receiver
     name: "Media Player Pause"
     receiver_id: ir_rx
-    nec:
-      address: 0x87EE
-      command: 0x015F
+    sony:
+      data: 0x00098B47
+      nbits: 20
 
   - platform: remote_receiver
     name: "Media Player Stop"
     receiver_id: ir_rx
-    nec:
-      address: 0x87E5
-      command: 0x0131
+    sony:
+      data: 0x00018B47
+      nbits: 20
 
   - platform: remote_receiver
     name: "Media Player Rewind"
     receiver_id: ir_rx
-    nec:
-      address: 0x87EE
-      command: 0x0109
+    sony:
+      data: 0x000D8B47
+      nbits: 20
 
   - platform: remote_receiver
     name: "Media Player Fast Forward"
     receiver_id: ir_rx
-    nec:
-      address: 0x87EE
-      command: 0x0106
+    sony:
+      data: 0x00038B47
+      nbits: 20
 
   - platform: remote_receiver
-    name: "Media Player Previous"
+    name: "Media Player Previous / Channel Down"
     receiver_id: ir_rx
-    nec:
-      address: 0x87E5
-      command: 0x0125
- 
+    sony:
+      data: 0x000EAB47
+      nbits: 20
+
   - platform: remote_receiver
-    name: "Media Player Next"
+    name: "Media Player Next / Channel Up"
     receiver_id: ir_rx
-    nec:
-      address: 0x87E5
-      command: 0x0123
-  
-    
+    sony:
+      data: 0x0006AB47
+      nbits: 20
+
 # --- RF & IR ONTVANGERS ---
 remote_receiver:
   # IR Ontvanger (IRRecv op GPIO33)
