@@ -58,8 +58,8 @@ binary_sensor:
 
 text_sensor:
   - platform: template
-    name: "Pronto IR last"
-    id: pronto_ir_last
+    name: "Beo4 IR last"
+    id: beo4_ir_last
     update_interval: never
   - platform: template
     name: "RC switch RF last"
@@ -80,14 +80,14 @@ remote_receiver:
       then:
         - lambda: |-
             std::string info = "Source: " + std::to_string(x.source) + " | Cmd: " + std::to_string(x.command);
-            id(rc_switch_rf_last).publish_state(info);
+            id(beo4_ir_last).publish_state(info);
     
     # on_pronto:
     #   then:
     #     - lambda: |-
     #         id(pronto_ir_last).publish_state(x.data);
     
-    dump:
+    dump: all
     # - pronto      # Print remote code in Pronto form. Useful for using arbitrary protocols.
     # - raw         # Print all remote codes in their raw form. Also useful for using arbitrary protocols.
     # - rc5         # Decode and dump RC5 IR codes.
@@ -99,7 +99,7 @@ remote_receiver:
     # - samsung36   # Decode and dump Samsung36 infrared codes.
     # - abbwelcome  # Decode and dump ABB-Welcome codes. Messages are sent via copper wires. See transmitter description for more details.
     # - aeha        # Decode and dump AEHA infrared codes.
-      - beo4        # Decode and dump B&O Beo4 infrared codes.
+    # - beo4        # Decode and dump B&O Beo4 infrared codes.
     # - canalsat    # Decode and dump CanalSat infrared codes.
     # - canalsatld  # Decode and dump CanalSatLD infrared codes.
     # - coolix      # Decode and dump Coolix infrared codes.
