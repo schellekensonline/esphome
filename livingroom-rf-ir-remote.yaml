@@ -121,12 +121,11 @@ remote_receiver:
  #   filter: 50us
     idle: 25ms
     id: ir_rx
-    tolerance: 40%
-    dump: 
-      - pronto      # Print remote code in Pronto form. Useful for using arbitrary protocols.
+    dump: all
+    # - pronto      # Print remote code in Pronto form. Useful for using arbitrary protocols.
     # - raw         # Print all remote codes in their raw form. Also useful for using arbitrary protocols.
     # - rc5         # Decode and dump RC5 IR codes.
-      - rc6         # Decode and dump RC6 IR codes.
+    # - rc6         # Decode and dump RC6 IR codes.
     # - nec         # Decode and dump NEC infrared codes.
     # - panasonic   # Decode and dump Panasonic infrared codes.
     # - sony        # Decode and dump Sony infrared codes.
