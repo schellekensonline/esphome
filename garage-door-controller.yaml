@@ -44,7 +44,12 @@ binary_sensor:
     filters: # prevent relay bounce
       - delayed_on: 20ms
       - delayed_off: 20ms
-
+    on_state:
+      then:
+        - logger.log:
+            format: "Input1 (Door open/alarm) state to: %s"
+            args: [ 'x ? "ON" : "OFF"' ]
+        
   # Interne sensor die controleert of IN1 aan het knipperen is
   - platform: template
     name: "Input1 flashing"
@@ -81,9 +86,10 @@ switch:
       number: GPIO23
       inverted: true
     on_turn_on:
+      - logger.log: "Relay1 (Door Control) state to: 500ms pulse generated"
       - delay: 500ms
       - switch.turn_off: OUT1
-
+        
   - platform: gpio
     name: "Relay2 door locked"
     id: OUT2
@@ -91,7 +97,12 @@ switch:
       number: GPIO5
       inverted: true
       ignore_strapping_warning: true #  note: GPIO 5 is a strapping/boot pin
-
+    on_state:
+      then:
+        - logger.log:
+            format: "Relay2 (Door Locked) state to: %s"
+            args: [ 'x ? "ON" : "OFF"' ]
+      
   # - platform: gpio
   #   name: "Relay 3"
   #   id: OUT3
