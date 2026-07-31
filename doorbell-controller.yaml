@@ -32,28 +32,44 @@ wifi:
 
 captive_portal:
 
-
-# 1. De Fysieke Knop (Input)
+## 5V is also available for the doorbel button. Connect 5V to IN1 or IN2
+# 1. Button inputs
 binary_sensor:
   - platform: gpio
     pin:
-      number: GPIO21
+      number: GPIO11
       mode: INPUT_PULLUP
       inverted: true # Zorgt dat 'true' (AAN) wordt doorgegeven als je de knop indrukt naar GND
-    name: "Doorbell Button"
-    id: fysieke_knop
+    name: "Doorbell Button 1"
+    id: fysical_button_1
     filters:
       - delayed_on: 50ms # Ontdender-filter (voorkomt dat de bel 2x gaat door een slechte knop)
     # Zodra de fysieke knop wordt ingedrukt, activeert hij de Home Assistant button hieronder
     on_press:
       then:
-        - button.press: deurbel_sequentie
+        - button.press: doorbel_sequence_1
 
-# 2. De Home Assistant Drukknop & Sequentie
+  - platform: gpio
+    pin:
+      number: GPIO04
+      mode: INPUT_PULLUP
+      inverted: true # Zorgt dat 'true' (AAN) wordt doorgegeven als je de knop indrukt naar GND
+    name: "Doorbell Button 2"
+    id: fysical_button_2
+    filters:
+      - delayed_on: 50ms # Ontdender-filter (voorkomt dat de bel 2x gaat door een slechte knop)
+    # Zodra de fysieke knop wordt ingedrukt, activeert hij de Home Assistant button hieronder
+    on_press:
+      then:
+        - button.press: doorbel_sequence_2
+        - logger: 
+
+          
+# 2. Home Assistant inputs / sequences
 button:
   - platform: template
-    name: "Doorbell Sound"
-    id: deurbel_sequentie
+    name: "Doorbell Sound 1"
+    id: doorbel_sequence_1
     icon: "mdi:doorbell-video"
     # Deze actie wordt nu getriggerd door ZOWEL Home Assistant als de fysieke knop!
     on_press:
@@ -72,7 +88,29 @@ button:
         - switch.turn_on: deurbel_relais
         - delay: 400ms
         - switch.turn_off: deurbel_relais
-          
+
+  - platform: template
+    name: "Doorbell Sound 2"
+    id: doorbel_sequence_2
+    icon: "mdi:doorbell-video"
+    # Deze actie wordt nu getriggerd door ZOWEL Home Assistant als de fysieke knop!
+    on_press:
+      then:
+        # Eerste Ding
+        - switch.turn_on: deurbel_relais
+        - delay: 400ms
+        - switch.turn_off: deurbel_relais
+        - delay: 500ms
+        # Tweede Ding
+        - switch.turn_on: deurbel_relais
+        - delay: 400ms
+        - switch.turn_off: deurbel_relais
+        - delay: 500ms
+        # Derde Ding
+        - switch.turn_on: deurbel_relais
+        - delay: 400ms
+        - switch.turn_off: deurbel_relais
+
 # 3. Het Hardware Relais (Output)
 switch:
   - platform: gpio
