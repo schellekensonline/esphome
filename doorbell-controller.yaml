@@ -47,8 +47,10 @@ binary_sensor:
     # Zodra de fysieke knop wordt ingedrukt, activeert hij de Home Assistant button hieronder
     on_press:
       then:
-        - button.press: doorbel_sequence_1
-
+        - button.press: doorbell_sequence_1
+        - logger.log:
+            format: "Input1 (Doorbell) state to: Pressed"
+          
   - platform: gpio
     pin:
       number: GPIO04
@@ -61,65 +63,66 @@ binary_sensor:
     # Zodra de fysieke knop wordt ingedrukt, activeert hij de Home Assistant button hieronder
     on_press:
       then:
-        - button.press: doorbel_sequence_2
-    on_state:
-        then:
-          - logger.log:
-              format: "Input2 (Doorbel) state to: %s"
-              args: [ 'x ? "ON" : "OFF"' ]
+        - button.press: doorbell_sequence_2
+        - logger.log:
+            format: "Input2 (Doorbell) state to: Pressed"
 
           
 # 2. Home Assistant inputs / sequences
 button:
   - platform: template
     name: "Doorbell Sound 1"
-    id: doorbel_sequence_1
+    id: doorbell_sequence_1
     icon: "mdi:doorbell-video"
     # Deze actie wordt nu getriggerd door ZOWEL Home Assistant als de fysieke knop!
     on_press:
       then:
         # Eerste Ding
-        - switch.turn_on: deurbel_relais
+        - switch.turn_on: doorbell_relay
         - delay: 400ms
-        - switch.turn_off: deurbel_relais
+        - switch.turn_off: doorbell_relay
         - delay: 500ms
         # Tweede Ding
-        - switch.turn_on: deurbel_relais
+        - switch.turn_on: doorbell_relay
         - delay: 400ms
-        - switch.turn_off: deurbel_relais
+        - switch.turn_off: doorbell_relay
         - delay: 500ms
         # Derde Ding
-        - switch.turn_on: deurbel_relais
+        - switch.turn_on: doorbell_relay
         - delay: 400ms
-        - switch.turn_off: deurbel_relais
-
+        - switch.turn_off: doorbell_relay
+        - logger.log:
+            format: "Sequence 1 (Doorbell) state to: Played"
+          
   - platform: template
     name: "Doorbell Sound 2"
-    id: doorbel_sequence_2
+    id: doorbell_sequence_2
     icon: "mdi:doorbell-video"
     # Deze actie wordt nu getriggerd door ZOWEL Home Assistant als de fysieke knop!
     on_press:
       then:
         # Eerste Ding
-        - switch.turn_on: deurbel_relais
+        - switch.turn_on: doorbell_relay
         - delay: 400ms
-        - switch.turn_off: deurbel_relais
+        - switch.turn_off: doorbell_relay
         - delay: 500ms
         # Tweede Ding
-        - switch.turn_on: deurbel_relais
+        - switch.turn_on: doorbell_relay
         - delay: 400ms
-        - switch.turn_off: deurbel_relais
+        - switch.turn_off: doorbell_relay
         - delay: 500ms
         # Derde Ding
-        - switch.turn_on: deurbel_relais
+        - switch.turn_on: doorbell_relay
         - delay: 400ms
-        - switch.turn_off: deurbel_relais
-
+        - switch.turn_off: doorbell_relay
+        - logger.log:
+            format: "Sequence 2 (Doorbell) state to: Played"
+          
 # 3. Het Hardware Relais (Output)
 switch:
   - platform: gpio
     pin: GPIO19
-    id: deurbel_relais
+    id: doorbell_relay
     internal: true # Houdt de losse schakelaar verborgen in Home Assistant
     restore_mode: ALWAYS_OFF
 
