@@ -53,7 +53,7 @@ binary_sensor:
           
   - platform: gpio
     pin:
-      number: GPIO04
+      number: GPIO06
       mode: INPUT_PULLUP
       inverted: true # Zorgt dat 'true' (AAN) wordt doorgegeven als je de knop indrukt naar GND
     name: "Doorbell Button 2"
