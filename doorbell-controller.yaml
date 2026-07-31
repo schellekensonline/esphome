@@ -43,8 +43,9 @@ binary_sensor:
     name: "Doorbell Button 1"
     id: fysical_button_1
     filters:
-      - delayed_on: 50ms # Ontdender-filter (voorkomt dat de bel 2x gaat door een slechte knop)
-    # Zodra de fysieke knop wordt ingedrukt, activeert hij de Home Assistant button hieronder
+      - delayed_on: 20ms # Ontdender-filter (voorkomt dat de bel 2x gaat door een slechte knop)
+      - delayed_off: 1000ms
+        # Zodra de fysieke knop wordt ingedrukt, activeert hij de Home Assistant button hieronder
     on_press:
       then:
         - button.press: doorbell_sequence_1
@@ -59,8 +60,9 @@ binary_sensor:
     name: "Doorbell Button 2"
     id: fysical_button_2
     filters:
-      - delayed_on: 50ms # Ontdender-filter (voorkomt dat de bel 2x gaat door een slechte knop)
-    # Zodra de fysieke knop wordt ingedrukt, activeert hij de Home Assistant button hieronder
+      - delayed_on: 20ms # Ontdender-filter (voorkomt dat de bel 2x gaat door een slechte knop)
+      - delayed_off: 1000ms
+        # Zodra de fysieke knop wordt ingedrukt, activeert hij de Home Assistant button hieronder
     on_press:
       then:
         - button.press: doorbell_sequence_2
