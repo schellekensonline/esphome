@@ -62,7 +62,11 @@ binary_sensor:
     on_press:
       then:
         - button.press: doorbel_sequence_2
-        - logger: 
+    on_state:
+        then:
+          - logger.log:
+              format: "Input2 (Doorbel) state to: %s"
+              args: [ 'x ? "ON" : "OFF"' ]
 
           
 # 2. Home Assistant inputs / sequences
