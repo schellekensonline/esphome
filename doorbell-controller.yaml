@@ -83,17 +83,17 @@ button:
       then:
         # Eerste Ding
         - switch.turn_on: doorbell_relay
-        - delay: 200ms
+        - delay: 350ms
         - switch.turn_off: doorbell_relay
         - delay: 500ms
         # Tweede Ding
         - switch.turn_on: doorbell_relay
-        - delay: 200ms
+        - delay: 350ms
         - switch.turn_off: doorbell_relay
         - delay: 500ms
         # Derde Ding
         - switch.turn_on: doorbell_relay
-        - delay: 200ms
+        - delay: 350ms
         - switch.turn_off: doorbell_relay
         - logger.log:
             format: "Sequence 1 (Doorbell) state to: Played"
@@ -107,17 +107,17 @@ button:
       then:
         # Eerste Ding
         - switch.turn_on: doorbell_relay
-        - delay: 300ms
+        - delay: 350ms
         - switch.turn_off: doorbell_relay
         - delay: 500ms
         # Tweede Ding
         - switch.turn_on: doorbell_relay
-        - delay: 300ms
+        - delay: 350ms
         - switch.turn_off: doorbell_relay
         - delay: 500ms
         # Derde Ding
         - switch.turn_on: doorbell_relay
-        - delay: 300ms
+        - delay: 350ms
         - switch.turn_off: doorbell_relay
         - logger.log:
             format: "Sequence 2 (Doorbell) state to: Played"
