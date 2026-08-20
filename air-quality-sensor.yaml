@@ -55,10 +55,10 @@ uart:
 sensor:
   - platform: sgp4x
     i2c_id: i2c_sens
-    voc:
+    voc_index:
       name: "VOC Index"
       id: voc_value
-    nox:
+    nox_index:
       name: "NOx Index"
       id: nox_value
 
