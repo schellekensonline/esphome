@@ -121,8 +121,8 @@ script:
           if (idx >= id(global_stations).size()) return;
           id(ha_radio_station).publish_state(id(global_stations)[idx]);
           id(s3_box_display).show_page(id(player_page));
-      - homeassistant.service:
-          service: input_select.select_option
+      - homeassistant.action:
+          action: input_select.select_option
           data:
             entity_id: input_select.music_assistant_radio_select
           data_template:
@@ -130,8 +130,8 @@ script:
               int idx = (id(radio_page_index) * 3) + row;
               return id(global_stations)[idx];
       # Always play — even if input_select already had this station
-      - homeassistant.service:
-          service: music_assistant.play_media
+      - homeassistant.action:
+          action: music_assistant.play_media
           data:
             entity_id: media_player.${ha_entity_name}
           data_template:
@@ -150,8 +150,8 @@ script:
           if (idx >= id(global_albums).size()) return;
           id(ha_album).publish_state(id(global_albums)[idx]);
           id(s3_box_display).show_page(id(player_page));
-      - homeassistant.service:
-          service: input_select.select_option
+      - homeassistant.action:
+          action: input_select.select_option
           data:
             entity_id: input_select.music_assistant_album_select
           data_template:
@@ -159,8 +159,8 @@ script:
               int idx = (id(album_page_index) * 3) + row;
               return id(global_albums)[idx];
       # Always play — even if input_select already had this album
-      - homeassistant.service:
-          service: music_assistant.play_media
+      - homeassistant.action:
+          action: music_assistant.play_media
           data:
             entity_id: media_player.${ha_entity_name}
           data_template:
@@ -516,8 +516,8 @@ binary_sensor:
     y_max: ${display_height}
     on_click:
       then:
-        - homeassistant.service:
-            service: media_player.media_previous_track
+        - homeassistant.action:
+            action: media_player.media_previous_track
             data:
               entity_id: media_player.${ha_entity_name}
         # - media_player.previous: pcm5101_player          # Choose to use MA / Sendspin or HA for player control depends on network config
@@ -537,8 +537,8 @@ binary_sensor:
     y_max: ${display_height}
     on_click:
       then:
-        - homeassistant.service:
-            service: media_player.media_play_pause
+        - homeassistant.action:
+            action: media_player.media_play_pause
             data:
               entity_id: media_player.${ha_entity_name}
         # - media_player.toggle: pcm5101_player
@@ -558,8 +558,8 @@ binary_sensor:
     y_max: ${display_height}
     on_click:
       then:
-        - homeassistant.service:
-            service: media_player.media_next_track
+        - homeassistant.action:
+            action: media_player.media_next_track
             data:
               entity_id: media_player.${ha_entity_name}
         # - media_player.next: pcm5101_player
