@@ -4,3 +4,10 @@
 /.esphome/
 /archive/
 /secrets.yaml
+
+# Hidden files
+/.*
+
+## INCLUDE
+# Gitignore file
+!/.gitignore
