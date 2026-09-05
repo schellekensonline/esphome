@@ -318,13 +318,14 @@ media_player:
       sources:
         - sendspin_audio_source
 
-online_image:
-  - id: mass_album_art_jpg
+image:
+  - platform: online_image
     url: "https://lipsum.app" # bogus url image is PNG and can't be decoded
     format: JPEG
     type: RGB565
     resize: "100x100"
-
+    id: mass_album_art_jpg
+    
 text_sensor:
   - platform: sendspin
     name: "Sendspin Title"
