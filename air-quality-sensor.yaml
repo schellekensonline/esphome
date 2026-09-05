@@ -10,12 +10,7 @@ esp32:
     type: esp-idf
     advanced:
       minimum_chip_revision: "3.1"
-      # sram1_as_iram: true
-    
-# external_components:
-#   - source: github://pr#8293
-#     components: [cm1106]
-#     refresh: 60s
+      sram1_as_iram: true    
 
 # Enable logging
 logger:
