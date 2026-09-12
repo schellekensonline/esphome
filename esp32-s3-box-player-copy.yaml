@@ -1,0 +1,1242 @@
+substitutions:
+  name: "esp32-s3-box-player"
+  friendly_name: "ESP32 S3 Box player"
+  ha_entity_name: "esp32_s3_box_player" # Home assistant name used in home assistant entity ID 
+  ha_ip_port: !secret ha_ip_port
+
+
+  speaker_buffer_duration: 1000ms
+  speaker_timeout: 500ms
+
+  # Display layout — change fonts here, touch zones follow automatically
+  max_title_str_length: "24"
+  max_normal_str_length: "30"
+  font_size_title: "24"
+  font_size_normal: "18"
+  font_size_small: "14"
+
+  player_icon_font_size: "28"
+  icon_bar_height: "44"          # IMPROVED: player_icon_font_size + 16
+  player_icon_touch_ymax: "196"  # IMPROVED: display_height - icon_bar_height
+
+
+  display_width: "320"
+  display_height: "240"
+  title_y: "20"
+  artist_y: "50"
+  title_line_y: "38"
+  list_y_offset: "50"
+  list_row_height: "36"
+  list_row_spacing: "8"
+  list_touch_ymax: "174"         # IMPROVED: y offset + 3 rows
+  page_nav_y_min: "190"
+  text_margin_x: "20"
+  time_margin_x: "8"
+
+  touch_feedback_delay: "300ms" # time the backlight dimms to show touch
+
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  includes:
+    - <sstream>
+
+esp32:
+  board: esp32s3box
+  # variant: esp32s3
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_key
+  homeassistant_services: true
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  id: wifi_wificomponent
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Esp32-S3-Box-Fallback-Hotspot"
+    password: !secret wifi_password
+
+captive_portal:
+
+globals:
+  - id: radio_page_index
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: global_stations
+    type: std::vector<std::string>
+  - id: album_page_index
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: global_albums
+    type: std::vector<std::string>
+  - id: progress_bar_offset
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+psram:
+  mode: octal
+  speed: 80MHz
+    
+sendspin:
+  id: sendspin_hub
+  task_stack_in_psram: true
+
+http_request:
+  useragent: esphome/device
+  timeout: 2s
+
+# IMPROVED: periodic refresh so scrolling titles actually animate
+interval:
+  - interval: 250ms
+    then:
+      - if:
+          condition:
+            display.is_displaying_page: player_page
+          then:
+            - component.update: s3_box_display
+
+# IMPROVED: shared selection logic instead of 6 nearly identical touch handlers per page
+script:
+  - id: select_radio_row
+    parameters:
+      row: int
+    then:
+      - lambda: |-
+          if (row < 0 || row > 2) return;
+          int idx = (id(radio_page_index) * 3) + row;
+          if (idx >= id(global_stations).size()) return;
+          id(ha_radio_station).publish_state(id(global_stations)[idx]);
+          id(s3_box_display).show_page(id(player_page));
+      - homeassistant.action:
+          action: input_select.select_option
+          data:
+            entity_id: input_select.music_assistant_radio_select
+          data_template:
+            option: !lambda |-
+              int idx = (id(radio_page_index) * 3) + row;
+              return id(global_stations)[idx];
+      # Always play — even if input_select already had this station
+      - homeassistant.action:
+          action: music_assistant.play_media
+          data:
+            entity_id: media_player.${ha_entity_name}
+          data_template:
+            media_id: !lambda |-
+              int idx = (id(radio_page_index) * 3) + row;
+              return id(global_stations)[idx];
+            media_type: radio
+        
+  - id: select_album_row
+    parameters:
+      row: int
+    then:
+      - lambda: |-
+          if (row < 0 || row > 2) return;
+          int idx = (id(album_page_index) * 3) + row;
+          if (idx >= id(global_albums).size()) return;
+          id(ha_album).publish_state(id(global_albums)[idx]);
+          id(s3_box_display).show_page(id(player_page));
+      - homeassistant.action:
+          action: input_select.select_option
+          data:
+            entity_id: input_select.music_assistant_album_select
+          data_template:
+            option: !lambda |-
+              int idx = (id(album_page_index) * 3) + row;
+              return id(global_albums)[idx];
+      # Always play — even if input_select already had this album
+      - homeassistant.action:
+          action: music_assistant.play_media
+          data:
+            entity_id: media_player.${ha_entity_name}
+          data_template:
+            media_id: !lambda |-
+              int idx = (id(album_page_index) * 3) + row;
+              return id(global_albums)[idx];
+            media_type: album
+
+  - id: radio_page_prev
+    then:
+      - lambda: |-
+          if (id(radio_page_index) > 0) id(radio_page_index)--;
+      - light.turn_off: backlight
+      - component.update: s3_box_display
+      - delay: ${touch_feedback_delay}
+      - light.turn_on: backlight
+
+  - id: radio_page_next
+    then:
+      - lambda: |-
+          if ((id(radio_page_index) * 3 + 3) < id(global_stations).size()) id(radio_page_index)++;
+      - light.turn_off: backlight
+      - component.update: s3_box_display
+      - delay: ${touch_feedback_delay}
+      - light.turn_on: backlight
+
+
+  - id: album_page_prev
+    then:
+      - lambda: |-
+          if (id(album_page_index) > 0) id(album_page_index)--;
+      - light.turn_off: backlight
+      - component.update: s3_box_display
+      - delay: ${touch_feedback_delay}
+      - light.turn_on: backlight
+
+
+  - id: album_page_next
+    then:
+      - lambda: |-
+          if ((id(album_page_index) * 3 + 3) < id(global_albums).size()) id(album_page_index)++;
+      - light.turn_off: backlight
+      - component.update: s3_box_display
+      - delay: ${touch_feedback_delay}
+      - light.turn_on: backlight
+
+
+switch:
+  - platform: gpio
+    name: Speaker Enable
+    id: speaker_enable
+    pin:
+      number: GPIO46
+      ignore_strapping_warning: true
+    restore_mode: ALWAYS_OFF
+    entity_category: config
+    disabled_by_default: true
+
+output:
+  - platform: ledc
+    pin:
+      number: GPIO45
+      ignore_strapping_warning: true
+    id: backlight_pwm
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: "Backlight"
+    id: backlight
+    restore_mode: RESTORE_DEFAULT_ON
+
+i2c:
+  - id: i2c_bus
+    sda: GPIO08
+    scl: GPIO18
+    scan: true
+    sda_pullup_enabled: true
+    scl_pullup_enabled: true
+    frequency: 400kHz
+
+touchscreen:
+  - platform: tt21100
+    id: my_touchscreen
+    i2c_id: i2c_bus
+    interrupt_pin:
+      number: GPIO3
+      ignore_strapping_warning: true
+    transform:
+      mirror_x: true
+
+i2s_audio:
+  - id: external_i2s_bus
+    i2s_bclk_pin: GPIO43
+    i2s_lrclk_pin: GPIO14
+  - id: i2s_audio_bus
+    i2s_lrclk_pin:
+      number: GPIO47
+    i2s_bclk_pin: GPIO17
+    i2s_mclk_pin: GPIO2
+
+# audio_adc:
+#   - platform: es7210
+#     id: es7210_adc
+#     i2c_id: i2c_bus
+#     bits_per_sample: 16bit
+#     sample_rate: 16000
+
+# audio_dac:
+#   - platform: es8311
+#     id: es8311_dac
+#     i2c_id: i2c_bus
+#     bits_per_sample: 16bit
+#     sample_rate: 48000
+
+# microphone:
+#   - platform: i2s_audio
+#     id: box_mic
+#     i2s_audio_id: i2s_audio_bus
+#     sample_rate: 16000
+#     i2s_din_pin: GPIO16
+#     bits_per_sample: 16bit
+#     adc_type: external
+
+speaker:
+  - platform: i2s_audio
+    id: pcm5101_speaker
+    i2s_audio_id: external_i2s_bus
+    i2s_dout_pin: GPIO44
+    dac_type: external
+    channel: stereo
+    buffer_duration: ${speaker_buffer_duration}
+    timeout: ${speaker_timeout}
+  # - id: i2s_audio_speaker
+  #   platform: i2s_audio
+  #   i2s_audio_id: i2s_audio_bus
+  #   i2s_dout_pin: GPIO15
+  #   dac_type: external
+  #   sample_rate: 48000
+  #   bits_per_sample: 16bit
+  #   channel: left
+  #   audio_dac: es8311_dac
+  #   buffer_duration: 100ms
+
+media_source:
+  - platform: sendspin
+    id: sendspin_audio_source
+
+media_player:
+  - platform: speaker_source
+    id: pcm5101_player
+    name: "Media player"
+    media_pipeline:
+      speaker: pcm5101_speaker
+      sources:
+        - sendspin_audio_source
+
+image:
+  - platform: online_image
+    url: "https://lipsum.app" # bogus url image is PNG and can't be decoded
+    format: JPEG
+    type: RGB565
+    resize: "100x100"
+    id: mass_album_art_jpg
+    
+text_sensor:
+  - platform: sendspin
+    name: "Sendspin Title"
+    id: sendspin_title
+    type: title
+    internal: true
+    on_value:
+      then:
+        - component.update: s3_box_display
+
+  - platform: sendspin
+    name: "Sendspin Artist"
+    id: sendspin_artist
+    type: artist
+    internal: true
+    on_value:
+      then:
+        - component.update: s3_box_display
+
+  - platform: homeassistant
+    id: mass_album_art_url
+    entity_id: sensor.music_assistant_active_album_art
+    on_value:
+      then:
+        - lambda: |-
+            if (x == "none" || x.empty()) {
+              ESP_LOGD("main", "No album art active.");
+              // id(mass_album_art_jpg).set_url("https://lipsum.app/100x100/");  // IMPROVED: avoid empty URL HTTP errors
+              // id(mass_album_art_jpg).update();
+              id(mass_album_art_jpg).release(); 
+            } else {
+              std::string full_url = x;
+              if (x.rfind("/", 0) == 0) {
+                full_url = str_sprintf("%s%s", "${ha_ip_port}", x.c_str());
+              }
+              ESP_LOGD("main", "Album art URL: %s", full_url.c_str());
+              id(mass_album_art_jpg).set_url(full_url);
+              // We updaten hier nog NIET, zodat de audio eerst kan starten
+            }
+        # TOEVOEGEN: Geef de audio-stream 400ms de tijd om de 1s buffer te vullen
+        - delay: 400ms
+        - component.update: mass_album_art_jpg
+
+  - platform: homeassistant
+    name: "Geselecteerde Radiozender vanaf HA"
+    entity_id: input_select.music_assistant_radio_select
+    id: ha_radio_station
+
+  # IMPROVED: parse list once on change, not on every display frame
+  - platform: homeassistant
+    name: "Beschikbare Radiozenders Lijst"
+    entity_id: input_select.music_assistant_radio_select
+    attribute: options
+    id: ha_radio_options_list
+    on_value:
+      then:
+        - lambda: |-
+            id(global_stations).clear();
+            if (x.empty()) return;
+
+            std::stringstream ss(x);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+              if (item.empty()) continue;
+              size_t start = item.find_first_not_of(" []\"'");
+              size_t end = item.find_last_not_of(" []\"'");
+              if (start == std::string::npos || end == std::string::npos) continue;
+              // Skip the placeholders, otherwise they are drawn as if they were a station
+              std::string station = item.substr(start, end - start + 1);
+              if (station == "Laden..." || station == "Geen favorieten gevonden" || station == "Geen albums gevonden") continue;
+              id(global_stations).push_back(station);
+            }
+
+            int max_page = id(global_stations).empty() ? 0 : (id(global_stations).size() - 1) / 3;
+            if (id(radio_page_index) > max_page) id(radio_page_index) = max_page;
+        - component.update: s3_box_display
+
+  - platform: homeassistant
+    name: "Geselecteerde Album vanaf HA"
+    entity_id: input_select.music_assistant_album_select
+    id: ha_album
+
+  # IMPROVED: parse list once on change, not on every display frame
+  - platform: homeassistant
+    name: "Beschikbare Albums Lijst"
+    entity_id: input_select.music_assistant_album_select
+    attribute: options
+    id: ha_album_options_list
+    on_value:
+      then:
+        - lambda: |-
+            id(global_albums).clear();
+            if (x.empty()) return;
+
+            std::stringstream ss(x);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+              if (item.empty()) continue;
+              size_t start = item.find_first_not_of(" []\"'");
+              size_t end = item.find_last_not_of(" []\"'");
+              if (start == std::string::npos || end == std::string::npos) continue;
+              // Skip the placeholders, otherwise they are drawn as if they were an album
+              std::string album = item.substr(start, end - start + 1);
+              if (album == "Laden..." || album == "Geen favorieten gevonden" || album == "Geen albums gevonden") continue;
+              id(global_albums).push_back(album);
+            }
+
+            int max_page = id(global_albums).empty() ? 0 : (id(global_albums).size() - 1) / 3;
+            if (id(album_page_index) > max_page) id(album_page_index) = max_page;
+        - component.update: s3_box_display
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi db"
+    id: wifi_signal_db
+    update_interval: 60s
+
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "WiFi Signal"
+    id: wifi_percent
+    internal: true
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    entity_category: diagnostic
+
+  - platform: sendspin
+    name: "Track Progress"
+    type: track_progress
+    id: track_progress
+    internal: true
+    update_interval: 1000ms
+
+  - platform: sendspin
+    name: "Track Duration"
+    type: track_duration
+    id: track_duration
+    internal: true
+
+#   - platform: sendspin
+#     name: "Track Number"
+#     type: track
+#   - platform: sendspin
+#     name: "Year"
+#     type: year
+#     internal: true
+
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    update_interval: 60s
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO0
+      mode: INPUT_PULLUP
+      inverted: true
+      ignore_strapping_warning: true
+    id: left_top_button
+    internal: true
+
+  - platform: tt21100
+    id: home_button
+    internal: true
+    index: 0
+    on_click:
+      min_length: 10ms
+      max_length: 500ms
+      then:
+        - lambda: |-
+            if (id(s3_box_display).get_active_page() == id(player_page)) {
+              id(s3_box_display).show_page(id(radio_stations_page));
+            } else if (id(s3_box_display).get_active_page() == id(radio_stations_page)) {
+              id(s3_box_display).show_page(id(albums_page));
+            } else if (id(s3_box_display).get_active_page() == id(albums_page)) {
+              id(s3_box_display).show_page(id(settings_page));
+            } else {
+              id(s3_box_display).show_page(id(player_page));
+            }
+        - component.update: s3_box_display
+    
+
+  - platform: touchscreen
+    id: btn_media_prev
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [player_page]
+    x_min: 0
+    x_max: 80
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - homeassistant.action:
+            action: media_player.media_previous_track
+            data:
+              entity_id: media_player.${ha_entity_name}
+        # - media_player.previous: pcm5101_player          # Choose to use MA / Sendspin or HA for player control depends on network config
+        - light.turn_off: backlight
+        - component.update: s3_box_display
+        - delay: ${touch_feedback_delay}
+        - light.turn_on: backlight
+
+  - platform: touchscreen
+    id: btn_media_play
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [player_page]
+    x_min: 80
+    x_max: 160
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - homeassistant.action:
+            action: media_player.media_play_pause
+            data:
+              entity_id: media_player.${ha_entity_name}
+        # - media_player.toggle: pcm5101_player
+        - light.turn_off: backlight
+        - component.update: s3_box_display
+        - delay: ${touch_feedback_delay}
+        - light.turn_on: backlight
+
+  - platform: touchscreen
+    id: btn_media_next
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [player_page]
+    x_min: 160
+    x_max: 240
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - homeassistant.action:
+            action: media_player.media_next_track
+            data:
+              entity_id: media_player.${ha_entity_name}
+        # - media_player.next: pcm5101_player
+        - light.turn_off: backlight
+        - component.update: s3_box_display
+        - delay: ${touch_feedback_delay}
+        - light.turn_on: backlight
+
+  - platform: touchscreen
+    id: btn_media_mute
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [player_page]
+    x_min: 240
+    x_max: ${display_width}
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - if:
+            condition:
+              lambda: return id(pcm5101_player).is_muted();
+            then:
+              - media_player.unmute: pcm5101_player
+            else:
+              - media_player.mute: pcm5101_player
+        - light.turn_off: backlight
+        - component.update: s3_box_display
+        - delay: ${touch_feedback_delay}
+        - light.turn_on: backlight
+
+  # IMPROVED: one list touch zone instead of three separate row buttons
+  - platform: touchscreen
+    id: btn_radio_list
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [radio_stations_page]
+    x_min: 20
+    x_max: 300
+    y_min: ${list_y_offset}
+    y_max: ${list_touch_ymax}
+    on_click:
+      then:
+        - script.execute:
+            id: select_radio_row
+            row: !lambda |-
+              auto tp = id(my_touchscreen)->get_touch();
+              if (!tp.has_value()) return -1;
+              return (tp.value().y - ${list_y_offset}) / (${list_row_height} + ${list_row_spacing});
+
+
+  - platform: touchscreen
+    id: btn_radio_prev
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [radio_stations_page]
+    x_min: 0
+    x_max: 90
+    y_min: ${page_nav_y_min}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - script.execute: radio_page_prev
+
+  - platform: touchscreen
+    id: btn_radio_next
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [radio_stations_page]
+    x_min: 230
+    x_max: ${display_width}
+    y_min: ${page_nav_y_min}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - script.execute: radio_page_next
+
+  # IMPROVED: one list touch zone instead of three separate row buttons
+  - platform: touchscreen
+    id: btn_album_list
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [albums_page]
+    x_min: 20
+    x_max: 300
+    y_min: ${list_y_offset}
+    y_max: ${list_touch_ymax}
+    on_click:
+      then:
+        - script.execute:
+            id: select_album_row
+            row: !lambda |-
+              auto tp = id(my_touchscreen)->get_touch();
+              if (!tp.has_value()) return -1;
+              return (tp.value().y - ${list_y_offset}) / (${list_row_height} + ${list_row_spacing});
+
+
+  - platform: touchscreen
+    id: btn_album_prev
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [albums_page]
+    x_min: 0
+    x_max: 90
+    y_min: ${page_nav_y_min}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - script.execute: album_page_prev
+
+  - platform: touchscreen
+    id: btn_album_next
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [albums_page]
+    x_min: 230
+    x_max: ${display_width}
+    y_min: ${page_nav_y_min}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - script.execute: album_page_next
+
+  # STATE AND SETTINGS PAGE
+  - platform: touchscreen
+    id: btn_bright_down
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [settings_page]
+    x_min: 0
+    x_max: 80
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - light.control:
+            id: backlight
+            state: !lambda |-
+              return true; // Backlight is altijd aan
+            brightness: !lambda |-
+              float current = id(backlight).remote_values.get_brightness();
+              if (!id(backlight).remote_values.is_on()) {
+                current = 0.50; // start on 50%
+              }
+              
+              // 1. Reken om naar procenten (bijv. 43.2%)
+              float pct = current * 100.0;
+              
+              // 2. Rond af naar het dichtstbijzijnde veelvoud van 5 en tel er 5 bij op
+              // (Bijv: 43.2 / 5 = 8.64 -> round(8.64) = 9.0 -> 9.0 * 5 = 45% -> + 5% = 50%)
+              float next_pct = round(pct / 5.0) * 5.0 - 5.0;
+              
+              // 3. Reken weer terug naar een float tussen 0.0 en 1.0
+              float next = next_pct / 100.0;
+              
+              if (next < 0.05) next = 0.05;
+              return next;
+        - light.turn_off: backlight
+        - component.update: s3_box_display
+        - delay: ${touch_feedback_delay}
+        - light.turn_on: backlight
+
+
+
+  - platform: touchscreen
+    id: btn_bright_up
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [settings_page]
+    x_min: 80
+    x_max: 160
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - light.control:
+            id: backlight
+            state: !lambda |-
+              return true; // Backlight is altijd aan
+            brightness: !lambda |-
+              float current = id(backlight).remote_values.get_brightness();
+              if (!id(backlight).remote_values.is_on()) {
+                current = 0.50; // start on 50%
+              }
+              
+              // 1. Reken om naar procenten (bijv. 43.2%)
+              float pct = current * 100.0;
+              
+              // 2. Rond af naar het dichtstbijzijnde veelvoud van 5 en tel er 5 bij op
+              // (Bijv: 43.2 / 5 = 8.64 -> round(8.64) = 9.0 -> 9.0 * 5 = 45% -> + 5% = 50%)
+              float next_pct = round(pct / 5.0) * 5.0 + 5.0;
+              
+              // 3. Reken weer terug naar een float tussen 0.0 en 1.0
+              float next = next_pct / 100.0;
+              
+              if (next > 1.0) next = 1.0;
+              return next;
+        - light.turn_off: backlight
+        - component.update: s3_box_display
+        - delay: ${touch_feedback_delay}
+        - light.turn_on: backlight
+
+  - platform: touchscreen
+    id: btn_volume_down
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [settings_page]
+    x_min: 160
+    x_max: 240
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - media_player.volume_down: pcm5101_player
+        - light.turn_off: backlight
+        - component.update: s3_box_display
+        - delay: ${touch_feedback_delay}
+        - light.turn_on: backlight
+
+
+  - platform: touchscreen
+    id: btn_volume_up
+    touchscreen_id: my_touchscreen
+    internal: true
+    pages: [settings_page]
+    x_min: 240
+    x_max: ${display_width}
+    y_min: ${player_icon_touch_ymax}
+    y_max: ${display_height}
+    on_click:
+      then:
+        - media_player.volume_up: pcm5101_player
+        - light.turn_off: backlight
+        - component.update: s3_box_display
+        - delay: ${touch_feedback_delay}
+        - light.turn_on: backlight
+
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_title
+    size: ${font_size_title}
+  - file: "gfonts://Roboto"
+    id: font_normal
+    size: ${font_size_normal}
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: ${font_size_small}
+  - file: "gfonts://Material Symbols Outlined"
+    id: font_icons
+    size: ${player_icon_font_size}
+    glyphs:
+      - "\uE045" # previous 
+      - "\uE044" # next 
+      - "\uE037" # play
+      - "\uE1A2" # pause-circle
+      - "\uE050" # unmuted
+      - "\uE04F" # muted
+      - "\uE034" # pause
+      - "\uE04E" # Volume DOWN
+      - "\uE04D" # Volume UP
+      - "\uF7EC" # Backlight DOWN
+      - "\uF7ED" # Backlight UP
+      # --- REPARATIE: Universele Wi-Fi Iconen ---
+      - "\uE63E" # Wi-Fi uit / Geen verbinding (signal_wifi_off)
+      - "\uE62E" # Standaard Wi-Fi Logo voor actieve verbinding (wifi)
+
+
+color:
+  - id: color_black
+    red: 0%
+    green: 0%
+    blue: 0%
+  - id: color_white
+    red: 100%
+    green: 100%
+    blue: 100%
+  - id: color_dark_gray
+    red: 20%
+    green: 20%
+    blue: 20%
+  - id: color_green
+    red: 0%
+    green: 80%
+    blue: 0%
+  - id: color_red
+    red: 90%
+    green: 10%
+    blue: 10%
+  - id: color_light_gray
+    red: 60%
+    green: 60%
+    blue: 60%
+  - id: color_amber
+    red: 100%
+    green: 75%
+    blue: 0%
+
+spi:
+  - id: spi_bus
+    clk_pin: GPIO7
+    mosi_pin: GPIO6
+
+display:
+  - platform: mipi_spi
+    model: ILI9342
+    id: s3_box_display
+    cs_pin: GPIO5
+    dc_pin: GPIO4
+    reset_pin:
+      number: GPIO48
+      inverted: false
+    data_rate: 40MHz
+    color_depth: 16
+    dimensions:
+      width: ${display_width}
+      height: ${display_height}
+    transform:
+      swap_xy: false
+      mirror_x: true
+      mirror_y: true
+    pages:
+      - id: player_page
+        lambda: |-
+          int center_x = ${display_width} / 2;
+          it.fill(id(color_black));
+
+          // --- Title ---
+          if (id(sendspin_title).has_state()) {
+            std::string title = id(sendspin_title).state;
+            if (title.length() > ${max_title_str_length}) {
+              title += "        ";
+              int scroll_pos = (millis() / 150) % title.length();
+              std::string scrolled_title = title.substr(scroll_pos) + title.substr(0, scroll_pos);
+              scrolled_title = scrolled_title.substr(0, ${max_title_str_length});
+              it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, scrolled_title.c_str());
+            } else {
+              it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, title.c_str());
+            }
+          } else {
+            it.print(center_x, ${title_y}, id(font_title), id(color_light_gray), TextAlign::CENTER, "Geen muziek");
+          }
+
+          // --- Artist ---
+          if (id(sendspin_artist).has_state()) {
+            std::string artist = id(sendspin_artist).state;
+            if (artist.length() > ${max_normal_str_length}) {
+              artist = artist.substr(0, ${max_normal_str_length} - 3) + "...";
+            }
+            it.print(center_x, ${artist_y}, id(font_normal), id(color_light_gray), TextAlign::CENTER, artist.c_str());
+          } else {
+            it.print(center_x, ${artist_y}, id(font_normal), id(color_dark_gray), TextAlign::CENTER, "Onbekende artiest");
+          }
+
+
+          // --- Album Art ---
+          int bar_start_y = ${display_height} - ${icon_bar_height};
+          int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
+          int tekst_onderkant_y = ${artist_y} + (${font_size_normal} / 2);
+          int image_center_y = tekst_onderkant_y + ((bar_start_y - tekst_onderkant_y) / 2);
+
+          // Read the URL state string
+          if (id(mass_album_art_jpg).get_width() > 0) {
+            // Image exists and decoded fine: Draw it!
+            it.image(center_x, image_center_y, id(mass_album_art_jpg), ImageAlign::CENTER);
+          } else {
+            // NO JPEG draw square
+            it.filled_rectangle(center_x-50, image_center_y-50, 100, 100, id(color_dark_gray));
+          }
+
+          // --- Progress / duration bar ---
+          const int time_y = bar_start_y - ${font_size_normal};
+          const int progress_bar_y  = bar_start_y - 3;
+          const int progress_bar_left = ${time_margin_x};
+          const int progress_bar_right = ${display_width} - ${time_margin_x};
+          const int progress_bar_width = progress_bar_right - progress_bar_left;
+
+          auto format_time = [](uint32_t ms) -> std::string {
+            uint32_t total_sec = ms / 1000;
+            uint32_t hours = total_sec / 3600;
+            uint32_t minutes = (total_sec % 3600) / 60;
+            uint32_t seconds = total_sec % 60;
+            char buf[16];
+            if (hours > 0) {
+              snprintf(buf, sizeof(buf), "%u:%02u:%02u", hours, minutes, seconds);
+            } else {
+              snprintf(buf, sizeof(buf), "%u:%02u", minutes, seconds);
+            }
+            return std::string(buf);
+          };
+
+          bool is_playing = id(pcm5101_player).state == 2;
+          bool has_track = id(sendspin_title).has_state();
+          bool has_progress = id(track_progress).has_state();
+          bool has_duration = id(track_duration).has_state() && id(track_duration).state > 0.0f;
+          Color time_color = is_playing ? id(color_white) : id(color_light_gray);
+          Color bar_color = is_playing ? id(color_white) : id(color_light_gray);
+
+          if (has_track && has_progress) {
+            uint32_t progress_ms = (uint32_t) id(track_progress).state;
+
+            // Left: elapsed (frozen while paused — sensor holds last value)
+            it.print(${time_margin_x}, time_y, id(font_normal), time_color, TextAlign::CENTER_LEFT,
+                     format_time(progress_ms).c_str());
+
+            // Right: duration or LIVE
+            if (has_duration) {
+              it.print(${display_width} - ${time_margin_x}, time_y, id(font_normal), id(color_light_gray),
+                       TextAlign::CENTER_RIGHT, format_time((uint32_t) id(track_duration).state).c_str());
+            } else {
+              Color live_color = is_playing ? id(color_green) : id(color_light_gray);
+              it.print(${display_width} - ${time_margin_x}, time_y, id(font_normal), live_color,
+                       TextAlign::CENTER_RIGHT, "LIVE");
+            }
+
+            // Full-width gray track --> NO USE EXISTING LINE
+            //it.line(progress_bar_left, progress_bar_y, progress_bar_right, progress_bar_y, id(color_light_gray)); 
+
+            auto draw_thick_line = [&](int x1, int x2, Color color) {
+              if (x2 <= x1) return;
+              it.line(x1, progress_bar_y - 1, x2, progress_bar_y - 1, color);
+              it.line(x1, progress_bar_y,     x2, progress_bar_y,     color);
+              it.line(x1, progress_bar_y + 1, x2, progress_bar_y + 1, color);
+            };
+
+            if (has_duration) {
+              // Normal songs with duration as well playing as paused
+              uint32_t duration_ms = (uint32_t) id(track_duration).state;
+              float ratio = (float) progress_ms / (float) duration_ms;
+              if (ratio < 0.0f) ratio = 0.0f;
+              if (ratio > 1.0f) ratio = 1.0f;
+              int fill_w = (int) (ratio * progress_bar_width);
+              draw_thick_line(progress_bar_left, progress_bar_left + fill_w, bar_color);
+
+            } else if (is_playing) {
+              // LIVE + playing: sliding thick segment over gray track
+              int segment_w = progress_bar_width / 5;
+              if (segment_w < 16) segment_w = 16;
+              id(progress_bar_offset) = (millis() / 40) % (progress_bar_width - segment_w + 1);
+              draw_thick_line(progress_bar_left + id(progress_bar_offset), progress_bar_left + id(progress_bar_offset) + segment_w, bar_color);
+            } else {
+              int segment_w = progress_bar_width / 5;
+              if (segment_w < 16) segment_w = 16;
+              // id(progress_bar_offset) = (millis() / 40) % (progress_bar_width - segment_w + 1); // no progress update
+              draw_thick_line(progress_bar_left + id(progress_bar_offset), progress_bar_left + id(progress_bar_offset) + segment_w, bar_color);
+              // LIVE + paused/stopped: frozen thick marker
+              // uint32_t cap_ms = 4 * 60 * 60 * 1000UL;
+              // float ratio = (float) progress_ms / (float) cap_ms;
+              // if (ratio > 0.9f) ratio = 0.9f;
+              // int pos = (int) (ratio * progress_bar_width);
+              // int segment_w = 16;
+              // if (pos + segment_w > progress_bar_width) pos = progress_bar_width - segment_w;
+              // if (pos < 0) pos = 0;
+              // draw_thick_line(progress_bar_left + pos, progress_bar_left + pos + segment_w, bar_color);
+            }
+          }
+
+          // --- Icon bar ---
+          it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
+
+          it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE045");    // prev
+
+          if (id(pcm5101_player).state == 2) {
+            it.print(120, icon_center_y, id(font_icons), id(color_green), TextAlign::CENTER, "\uE034"); // pause
+          } else {
+            it.print(120, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE037"); // play
+          }
+
+          it.print(200, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE044");   // next
+
+          if (id(pcm5101_player).is_muted()) {
+            it.print(280, icon_center_y, id(font_icons), id(color_red), TextAlign::CENTER, "\uE04F");   // muted
+          } else {
+            it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE050"); // unmuted
+          }
+
+      # IMPROVED: draw only — list is parsed in ha_radio_options_list.on_value
+      - id: radio_stations_page
+        lambda: |-
+          int center_x = ${display_width} / 2;
+          int bar_start_y = ${display_height} - ${icon_bar_height};
+          int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
+
+          it.fill(id(color_black));
+          it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, "Favoriete Zenders");
+          it.line(${text_margin_x}, ${title_line_y}, ${display_width}-${text_margin_x}, ${title_line_y}, id(color_light_gray));
+
+          std::string current_playing = id(ha_radio_station).has_state() ? id(ha_radio_station).state : "";
+
+          if (id(global_stations).empty()) {
+            it.print(center_x, 110, id(font_normal), id(color_light_gray), TextAlign::CENTER, "Geen favorieten gevonden");
+            it.print(center_x, 140, id(font_normal), id(color_dark_gray), TextAlign::CENTER, "Markeer favorieten in Music Assistant");
+            it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
+            return;
+          }
+
+          int start_index = id(radio_page_index) * 3;
+          int y_offset = ${list_y_offset};
+          int row_height = ${list_row_height};
+          int row_width = ${display_width}-(${text_margin_x}*2);
+          int spacing = ${list_row_spacing};
+
+          for (int i = 0; i < 3; i++) {
+            int current_idx = start_index + i;
+            if (current_idx >= id(global_stations).size()) break;
+
+          
+            std::string station_name = id(global_stations)[current_idx];         
+            bool is_active = (current_playing == station_name);
+            int current_y = y_offset + (i * (row_height + spacing));
+            if (station_name.length() > ${max_normal_str_length}) {
+              station_name = station_name.substr(0, ${max_normal_str_length} - 3) + "...";
+            }
+
+            if (is_active) {
+              it.filled_rectangle(${text_margin_x}, current_y, row_width, row_height, id(color_green));
+              it.print(center_x, current_y + (row_height / 2), id(font_normal), id(color_dark_gray), TextAlign::CENTER, station_name.c_str());
+            } else {
+              it.filled_rectangle(${text_margin_x}, current_y, row_width, row_height, id(color_light_gray));
+              it.print(center_x, current_y + (row_height / 2), id(font_normal), id(color_white), TextAlign::CENTER, station_name.c_str());
+            }
+          }
+
+          it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
+          int total_pages = (id(global_stations).size() + 2) / 3;
+
+          it.print(40, icon_center_y, id(font_icons), id(radio_page_index) > 0 ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE045");
+          it.print(center_x, icon_center_y, id(font_normal), id(color_dark_gray), TextAlign::CENTER,
+                   esphome::str_sprintf("%d / %d", id(radio_page_index) + 1, total_pages).c_str());
+          it.print(280, icon_center_y, id(font_icons), (start_index + 3) < id(global_stations).size() ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE044");
+
+      # IMPROVED: draw only — list is parsed in ha_album_options_list.on_value
+      - id: albums_page
+        lambda: |-
+          const int center_x = ${display_width} / 2;
+          const int bar_start_y = ${display_height} - ${icon_bar_height};
+          const int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
+
+          it.fill(id(color_black));
+          it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, "Favoriete Albums");
+          it.line(${text_margin_x}, ${title_line_y}, ${display_width}-${text_margin_x}, ${title_line_y}, id(color_light_gray));
+
+          std::string current_playing = id(ha_album).has_state() ? id(ha_album).state : "";
+
+          if (id(global_albums).empty()) {
+            it.print(center_x, 110, id(font_normal), id(color_light_gray), TextAlign::CENTER, "Geen albums gevonden");
+            it.print(center_x, 140, id(font_normal), id(color_dark_gray), TextAlign::CENTER, "Markeer favorieten in Music Assistant");
+            it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
+            return;
+          }
+
+          int start_index = id(album_page_index) * 3;
+          int y_offset = ${list_y_offset};
+          int row_height = ${list_row_height};
+          int row_width = ${display_width}-(${text_margin_x}*2);
+          int spacing = ${list_row_spacing};
+
+          for (int i = 0; i < 3; i++) {
+            int current_idx = start_index + i;
+            if (current_idx >= id(global_albums).size()) break;
+
+            std::string album_name = id(global_albums)[current_idx];
+            int current_y = y_offset + (i * (row_height + spacing));
+            bool is_active = (current_playing == album_name);
+            if (album_name.length() > ${max_normal_str_length}) {
+              album_name = album_name.substr(0, ${max_normal_str_length} - 3) + "...";
+            }
+
+            if (is_active) {
+              it.filled_rectangle(${text_margin_x}, current_y, row_width, row_height, id(color_green));
+              it.print(center_x, current_y + (row_height / 2), id(font_normal), id(color_dark_gray), TextAlign::CENTER, album_name.c_str());
+            } else {
+              it.filled_rectangle(${text_margin_x}, current_y, row_width, row_height, id(color_light_gray));
+              it.print(center_x, current_y + (row_height / 2), id(font_normal), id(color_white), TextAlign::CENTER, album_name.c_str());
+            }
+          }
+
+          it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
+          int total_pages = (id(global_albums).size() + 2) / 3;
+
+          it.print(40, icon_center_y, id(font_icons), id(album_page_index) > 0 ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE045");
+          it.print(center_x, icon_center_y, id(font_normal), id(color_dark_gray), TextAlign::CENTER,
+                   esphome::str_sprintf("%d / %d", id(album_page_index) + 1, total_pages).c_str());
+          it.print(280, icon_center_y, id(font_icons), (start_index + 3) < id(global_albums).size() ? id(color_white) : id(color_dark_gray), TextAlign::CENTER, "\uE044");
+
+      - id: settings_page
+        lambda: |-
+          int bar_start_y = ${display_height} - ${icon_bar_height};
+          int icon_center_y = bar_start_y + (${icon_bar_height} / 2);
+          
+          const int center_x = ${display_width} / 2;
+          const int line_height = ${font_size_normal} * 1.5;
+          int text_y = ${artist_y} + ${font_size_normal} * 0.5 + (line_height);
+
+          it.fill(id(color_black));
+          it.print(center_x, ${title_y}, id(font_title), id(color_white), TextAlign::CENTER, "Status en Instellingen");
+          it.print(center_x, ${artist_y}, id(font_normal), id(color_light_gray), TextAlign::CENTER, "Druk rode cirkel voor volgende pagina");
+
+          // --- Regel 1: WiFi Status met dynamisch gekleurd percentage ---
+          it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "WiFi:");
+          
+          if (id(wifi_percent).has_state() && id(wifi_wificomponent).is_connected()) {
+            float pct = id(wifi_percent).state;
+            auto wifi_color = id(color_red);
+            
+            // Bepaal de kleur op basis van het percentage
+            if (pct > 75) {
+              wifi_color = id(color_green);
+            } else if (pct > 40) {
+              wifi_color = id(color_amber);
+            }
+            
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), wifi_color, TextAlign::CENTER_RIGHT,
+                     esphome::str_sprintf("%.0f %%", pct).c_str());
+          } else {
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_red), TextAlign::CENTER_RIGHT, "N/A");
+          }
+          
+          // IP-adres in het midden van de WiFi-regel
+          char buf[esphome::network::IP_ADDRESS_BUFFER_SIZE];
+          if (id(wifi_wificomponent).is_connected()) {
+            id(wifi_wificomponent).get_ip_addresses()[0].str_to(buf);
+            it.print(center_x, text_y, id(font_normal), id(color_light_gray), TextAlign::CENTER, buf);
+          } else {
+            it.print(center_x, text_y, id(font_normal), id(color_red), TextAlign::CENTER, "Verbinden...");
+          }
+
+          // --- Regel 2: Interne Speaker Status ---
+          text_y += line_height;
+          it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Interne Speaker:");
+          if (id(speaker_enable).state) {
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_green), TextAlign::CENTER_RIGHT, "AAN");
+          } else {
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_red), TextAlign::CENTER_RIGHT, "UIT");
+          }
+
+          // --- Regel 3: Systeem Uptime ---
+          text_y += line_height;
+          it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Uptime:");
+          if (id(uptime_sensor).has_state()) {
+            float seconds = id(uptime_sensor).state;
+            int days = seconds / 86400;
+            int hours = ((int)seconds % 86400) / 3600;
+            int minutes = ((int)seconds % 3600) / 60;
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_light_gray), TextAlign::CENTER_RIGHT, 
+                     esphome::str_sprintf("%dd %du %dm", days, hours, minutes).c_str());
+          } else {
+            it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_red), TextAlign::CENTER_RIGHT, "-");
+          }
+
+          // --- Regel 4: Vrij RAM Geheugen ---
+          text_y += line_height;
+          it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Vrij Geheugen (RAM):");
+          uint32_t free_heap = esp_get_free_heap_size() / 1024;
+          it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_light_gray), TextAlign::CENTER_RIGHT, 
+                   esphome::str_sprintf("%d KB", free_heap).c_str());
+
+
+          // --- Bottom Icon Bar (Helderheid & Volume) ---
+          it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
+          
+          // Backlight control info
+          it.print(40, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uF7EC");
+          float brightness_percent = id(backlight).remote_values.get_brightness() * 100.0;
+          it.print(80, icon_center_y, id(font_small), id(color_white), TextAlign::CENTER, 
+                      esphome::str_sprintf("%.0f %%", brightness_percent).c_str());
+          it.print(120, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uF7ED");
+
+          // Volume control info
+          it.print(200, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE04E");
+          float volume_percent = id(pcm5101_player).volume * 100.0;
+          it.print(240, icon_center_y, id(font_small), id(color_white), TextAlign::CENTER, 
+                      esphome::str_sprintf("%.0f %%", volume_percent).c_str());
+          it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE04D");
+
