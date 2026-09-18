@@ -57,7 +57,8 @@ api:
 
 ota:
   - platform: esphome
-    password: !secret ota_password
+    encryption:
+    # password: !secret ota_password
 
 wifi:
   id: wifi_wificomponent
