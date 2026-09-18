@@ -949,9 +949,9 @@ display:
             uint32_t seconds = total_sec % 60;
             char buf[16];
             if (hours > 0) {
-              snprintf(buf, sizeof(buf), "%u:%02u:%02u", hours, minutes, seconds);
+              snprintf(buf, sizeof(buf), "%u:%02u:%02u", (unsigned int)hours, (unsigned int)minutes, (unsigned int)seconds);
             } else {
-              snprintf(buf, sizeof(buf), "%u:%02u", minutes, seconds);
+              snprintf(buf, sizeof(buf), "%u:%02u", (unsigned int)minutes, (unsigned int)seconds);
             }
             return std::string(buf);
           };
@@ -1178,7 +1178,7 @@ display:
             }
             
             it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), wifi_color, TextAlign::CENTER_RIGHT,
-                     esphome::str_sprintf("%.0f %%", pct).c_str());
+                esphome::str_sprintf("%.0f %%", (float)pct).c_str());         
           } else {
             it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_red), TextAlign::CENTER_RIGHT, "N/A");
           }
@@ -1210,7 +1210,7 @@ display:
             int hours = ((int)seconds % 86400) / 3600;
             int minutes = ((int)seconds % 3600) / 60;
             it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_light_gray), TextAlign::CENTER_RIGHT, 
-                     esphome::str_sprintf("%dd %du %dm", days, hours, minutes).c_str());
+                    esphome::str_sprintf("%uu %uu %um", (unsigned int)days, (unsigned int)hours, (unsigned int)minutes).c_str());
           } else {
             it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_red), TextAlign::CENTER_RIGHT, "-");
           }
@@ -1220,8 +1220,7 @@ display:
           it.print(${text_margin_x}, text_y, id(font_normal), id(color_white), TextAlign::CENTER_LEFT, "Vrij Geheugen (RAM):");
           uint32_t free_heap = esp_get_free_heap_size() / 1024;
           it.print(${display_width}-${text_margin_x}, text_y, id(font_normal), id(color_light_gray), TextAlign::CENTER_RIGHT, 
-                   esphome::str_sprintf("%d KB", free_heap).c_str());
-
+                  esphome::str_sprintf("%u KB", (unsigned int)free_heap).c_str());
 
           // --- Bottom Icon Bar (Helderheid & Volume) ---
           it.line(0, bar_start_y, ${display_width}, bar_start_y, id(color_light_gray));
