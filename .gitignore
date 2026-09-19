@@ -8,6 +8,9 @@
 # Hidden files
 /.*
 
+# PDFs: datasheets and drawings stay out of this repo
+*.pdf
+
 ## INCLUDE
 # Gitignore file
 !/.gitignore
