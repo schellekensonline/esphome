@@ -121,24 +121,17 @@ script:
           if (idx >= id(global_stations).size()) return;
           id(ha_radio_station).publish_state(id(global_stations)[idx]);
           id(s3_box_display).show_page(id(player_page));
+      # One play path: the HA script plays it directly when the station is already the
+      # selected option (the input_select would not change) and otherwise changes the
+      # input_select, whose automation plays it. That removes the duplicate play request.
       - homeassistant.action:
-          action: input_select.select_option
+          action: script.music_assistant_select_favorite
           data:
-            entity_id: input_select.music_assistant_radio_select
+            kind: radio
           data_template:
             option: !lambda |-
               int idx = (id(radio_page_index) * 3) + row;
               return id(global_stations)[idx];
-      # Always play — even if input_select already had this station
-      - homeassistant.action:
-          action: music_assistant.play_media
-          data:
-            entity_id: media_player.${ha_entity_name}
-          data_template:
-            media_id: !lambda |-
-              int idx = (id(radio_page_index) * 3) + row;
-              return id(global_stations)[idx];
-            media_type: radio
         
   - id: select_album_row
     parameters:
@@ -150,24 +143,17 @@ script:
           if (idx >= id(global_albums).size()) return;
           id(ha_album).publish_state(id(global_albums)[idx]);
           id(s3_box_display).show_page(id(player_page));
+      # One play path: the HA script plays it directly when the album is already the
+      # selected option (the input_select would not change) and otherwise changes the
+      # input_select, whose automation plays it. That removes the duplicate play request.
       - homeassistant.action:
-          action: input_select.select_option
+          action: script.music_assistant_select_favorite
           data:
-            entity_id: input_select.music_assistant_album_select
+            kind: album
           data_template:
             option: !lambda |-
               int idx = (id(album_page_index) * 3) + row;
               return id(global_albums)[idx];
-      # Always play — even if input_select already had this album
-      - homeassistant.action:
-          action: music_assistant.play_media
-          data:
-            entity_id: media_player.${ha_entity_name}
-          data_template:
-            media_id: !lambda |-
-              int idx = (id(album_page_index) * 3) + row;
-              return id(global_albums)[idx];
-            media_type: album
 
   - id: radio_page_prev
     then:
@@ -1238,4 +1224,3 @@ display:
           it.print(240, icon_center_y, id(font_small), id(color_white), TextAlign::CENTER, 
                       esphome::str_sprintf("%.0f %%", volume_percent).c_str());
           it.print(280, icon_center_y, id(font_icons), id(color_white), TextAlign::CENTER, "\uE04D");
-
